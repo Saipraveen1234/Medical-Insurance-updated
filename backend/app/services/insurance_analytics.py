@@ -10,24 +10,6 @@ from app.models import Employee, InsuranceFile
 class InsuranceService:
     def __init__(self, db: Session):
         self.db = db
-        
-    def get_adjustment_description(self, status: str) -> str:
-        """Convert adjustment code to a meaningful description."""
-        if not status or status.lower() == 'nan':
-            return "No Adjustments"
-        
-        # Map of adjustment codes to descriptions
-        adjustment_map = {
-            'A': 'Active Adjustment',
-            'C': 'Coverage Change',
-            'R': 'Rate Adjustment',
-            'T': 'Termination',
-            'P': 'Plan Change',
-            'D': 'Dependent Change'
-        }
-        
-        return adjustment_map.get(status.upper(), f"Other Adjustment ({status})")
-
 
     def process_file(self, file_content: str, plan_name: str) -> None:
         try:
@@ -42,22 +24,8 @@ class InsuranceService:
 
             try:
                 df = pd.read_excel(file_buffer)
-                print("Columns found:", df.columns.tolist())  # Debug line
-                
-                # Try different possible column names for premium amount
-                premium_column = None
-                possible_names = ['Premium Amount', 'Premium', 'Amount', 'Charge Amount', 'Premium_Amount']
-                
-                for col in possible_names:
-                    if col in df.columns:
-                        premium_column = col
-                        break
-                
-                if not premium_column:
-                    raise ValueError(f"Could not find premium amount column. Available columns: {df.columns.tolist()}")
-
-            except Exception as e:
-                print(f"Excel reading error: {str(e)}")
+                print("Columns found:", df.columns.tolist())
+            except:
                 file_buffer.seek(0)
                 df = pd.read_csv(file_buffer)
 
@@ -72,23 +40,33 @@ class InsuranceService:
 
             for _, row in df.iterrows():
                 try:
-                    # Get premium amount and handle various formats
-                    premium_amount = row.get(premium_column, 0)
+                    # Try different possible column names for amount
+                    amount_column_names = ['Premium Amount', 'Premium', 'Amount', 'Charge Amount', 'PREMIUM']
+                    premium_amount = None
                     
-                    # Handle different data types
-                    if pd.isna(premium_amount):
+                    for col_name in amount_column_names:
+                        if col_name in df.columns:
+                            premium_amount = row.get(col_name, 0)
+                            break
+                    
+                    if premium_amount is None:
+                        print(f"Warning: No amount column found. Available columns: {df.columns.tolist()}")
                         premium_amount = 0
-                    elif isinstance(premium_amount, str):
-                        # Remove currency symbols and special characters
-                        clean_amount = ''.join(c for c in premium_amount if c.isdigit() or c in '.-')
-                        premium_amount = float(clean_amount) if clean_amount else 0
+                    
+                    # Convert amount to float
+                    if isinstance(premium_amount, str):
+                        # Remove currency symbols and commas
+                        premium_amount = premium_amount.replace('$', '').replace(',', '')
+                        # Handle any other non-numeric characters
+                        premium_amount = ''.join(c for c in premium_amount if c.isdigit() or c in '.-')
+                        premium_amount = float(premium_amount) if premium_amount else 0
                     else:
-                        premium_amount = float(premium_amount)
+                        premium_amount = float(premium_amount) if pd.notnull(premium_amount) else 0
 
-                    print(f"Processing row - Original amount: {row.get(premium_column)}, Converted amount: {premium_amount}")  # Debug line
+                    print(f"Processing row - Amount: {premium_amount}")  # Debug line
 
                     employee = Employee(
-                        subscriber_name=str(row.get('Policy #', '')),
+                        subscriber_name=str(row.get('ID', '')),
                         plan=plan_name,
                         coverage_type=str(row.get('Coverage Type', 'Standard')),
                         status=str(row.get('Adj Code', 'nan')),
@@ -101,56 +79,58 @@ class InsuranceService:
                     self.db.add(employee)
                 except Exception as row_error:
                     print(f"Error processing row: {row_error}")
+                    print(f"Row data: {row}")  # Debug line
                     continue
 
             self.db.commit()
 
         except Exception as e:
             self.db.rollback()
+            print(f"Error processing file: {str(e)}")  # Debug line
             raise ValueError(str(e))
 
     def get_invoice_data(self) -> List[Dict[str, Any]]:
-            try:
-                latest_file = (
-                    self.db.query(InsuranceFile)
-                    .order_by(InsuranceFile.upload_date.desc())
-                    .first()
-                )
-                
-                if not latest_file:
-                    return []
-
-                employees = (
-                    self.db.query(Employee)
-                    .filter(Employee.insurance_file_id == latest_file.id)
-                    .all()
-                )
-
-                result = []
-                for employee in employees:
-                    # Format the adjustment code
-                    adj_code = "No Adjustments"
-                    if employee.status and employee.status.upper() != 'NAN':
-                        if employee.status.upper() == 'ADD':
-                            adj_code = 'Addition'
-                        elif employee.status.upper() == 'TRM':
-                            adj_code = 'Termination'
-                        else:
-                            adj_code = f'Other ({employee.status})'
-
-                    result.append({
-                        'invoiceId': f"Invoice-{employee.plan}-{latest_file.month}-{latest_file.year}",
-                        'invoiceDate': datetime.utcnow().strftime('%Y-%m-%d'),
-                        'coverageDates': employee.coverage_dates,
-                        'amount': float(employee.charge_amount),
-                        'adjCode': adj_code
-                    })
-
-                return sorted(result, key=lambda x: x['amount'], reverse=True)
-
-            except Exception as e:
-                print(f"Error getting invoice data: {str(e)}")
+        try:
+            latest_file = (
+                self.db.query(InsuranceFile)
+                .order_by(InsuranceFile.upload_date.desc())
+                .first()
+            )
+            
+            if not latest_file:
                 return []
+
+            employees = (
+                self.db.query(Employee)
+                .filter(Employee.insurance_file_id == latest_file.id)
+                .all()
+            )
+
+            result = []
+            for employee in employees:
+                # Format the adjustment code
+                adj_code = "No Adjustments"
+                if employee.status and employee.status.upper() != 'NAN':
+                    if employee.status.upper() == 'ADD':
+                        adj_code = 'Addition'
+                    elif employee.status.upper() == 'TRM':
+                        adj_code = 'Termination'
+                    else:
+                        adj_code = f'Other ({employee.status})'
+
+                result.append({
+                    'invoiceId': employee.subscriber_name,  # This is the ID from Excel
+                    'invoiceDate': datetime.utcnow().strftime('%Y-%m-%d'),
+                    'coverageDates': employee.coverage_dates,
+                    'amount': float(employee.charge_amount),
+                    'adjCode': adj_code
+                })
+
+            return sorted(result, key=lambda x: x['amount'], reverse=True)
+
+        except Exception as e:
+            print(f"Error getting invoice data: {str(e)}")
+            return []
 
     def get_uploaded_files(self) -> List[Dict[str, str]]:
         try:
