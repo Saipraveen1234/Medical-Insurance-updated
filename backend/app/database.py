@@ -1,4 +1,3 @@
-# backend/app/database.py
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
