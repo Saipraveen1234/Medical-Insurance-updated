@@ -5,12 +5,13 @@ from datetime import datetime
 from app.services.insurance_analytics import InsuranceService
 
 @strawberry.type
-class InvoiceData:
-    invoiceId: str
-    invoiceDate: str
-    coverageDates: str
-    amount: float
-    adjCode: str
+class InvoiceSummary:
+    planType: str
+    month: str
+    year: int
+    currentMonthTotal: float
+    previousMonthsTotal: float
+    grandTotal: float
 
 @strawberry.type
 class UploadedFile:
@@ -32,16 +33,17 @@ class OperationResult:
 @strawberry.type
 class Query:
     @strawberry.field
-    def get_invoice_data(self, info: Info) -> List[InvoiceData]:
+    def get_invoice_data(self, info: Info) -> List[InvoiceSummary]:
         service = InsuranceService(info.context.db)
         data = service.get_invoice_data()
         return [
-            InvoiceData(
-                invoiceId=item['invoiceId'],
-                invoiceDate=item['invoiceDate'],
-                coverageDates=item['coverageDates'],
-                amount=item['amount'],
-                adjCode=item['adjCode']
+            InvoiceSummary(
+                planType=item['planType'],
+                month=item['month'],
+                year=item['year'],
+                currentMonthTotal=item['currentMonthTotal'],
+                previousMonthsTotal=item['previousMonthsTotal'],
+                grandTotal=item['grandTotal']
             )
             for item in data
         ]

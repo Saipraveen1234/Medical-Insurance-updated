@@ -1,7 +1,8 @@
+// In App.tsx
 import React from 'react';
 import { AppShell, Box, Stack, Text } from '@mantine/core';
 import { IconDashboard, IconDatabase } from '@tabler/icons-react';
-import InvoiceTable from './components/InvoiceTable';
+import InvoiceSummaryDashboard from './components/InvoiceSummaryDashboard';
 import Datasets from './components/Datasets';
 import NavButton from './components/NavButton';
 
@@ -18,11 +19,11 @@ const App = () => {
   const renderView = () => {
     switch (activeView) {
       case VIEWS.DASHBOARD:
-        return <InvoiceTable />;
+        return <InvoiceSummaryDashboard />;
       case VIEWS.DATASETS:
         return <Datasets />;
       default:
-        return <InvoiceTable />;
+        return <InvoiceSummaryDashboard />;
     }
   };
 
@@ -56,12 +57,7 @@ const App = () => {
 
       <AppShell.Main bg="gray.0">
         <Box p="md">
-          <Stack gap="md">
-            <Text size="xl" fw={700}>
-              {activeView === VIEWS.DASHBOARD ? 'Invoice Summary' : 'Datasets'}
-            </Text>
-            {renderView()}
-          </Stack>
+          {renderView()}
         </Box>
       </AppShell.Main>
     </AppShell>

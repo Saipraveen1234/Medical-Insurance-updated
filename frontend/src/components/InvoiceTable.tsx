@@ -60,19 +60,20 @@ const InvoiceTable = () => {
       return 0;
     })
     .reduce((acc, invoice) => {
-      const existingRecord = acc.find(
-        record => record.invoiceId === invoice.invoiceId && 
-                  record.adjCode === "No Adjustments" &&
-                  !record.coverageDates.includes('10/01/2024')
-      );
+    const existingRecord = acc.find(
+      record => record.invoiceId === invoice.invoiceId && 
+                record.adjCode === "No Adjustments" &&
+                !record.coverageDates.includes('10/01/2024')
+    );
 
-      if (existingRecord && invoice.adjCode === "No Adjustments" && 
-          !invoice.coverageDates.includes('10/01/2024')) {
-        return acc;
-      }
+    if (existingRecord && invoice.adjCode === "No Adjustments" && 
+        !invoice.coverageDates.includes('10/01/2024')) {
+      // Skip duplicate non-October records with no adjustments
+      return acc;
+    }
 
-      return [...acc, invoice];
-    }, []);
+    return [...acc, invoice];
+  }, []);
 
   // Filter data based on selected view
   const filteredData = processedData.filter((invoice: any) => {
@@ -119,6 +120,7 @@ const InvoiceTable = () => {
               <Table.Th>Invoice ID</Table.Th>
               <Table.Th>Invoice Date</Table.Th>
               <Table.Th>Coverage Dates</Table.Th>
+              <Table.Th>Amount</Table.Th>
               <Table.Th>Adj Code</Table.Th>
               <Table.Th>10/01/2024 Amount</Table.Th>
               <Table.Th>2024 Amount</Table.Th>
@@ -147,6 +149,9 @@ const InvoiceTable = () => {
                   </Table.Td>
                   <Table.Td>{invoice.invoiceDate}</Table.Td>
                   <Table.Td>{invoice.coverageDates}</Table.Td>
+                  <Table.Td>
+                    {formatAmount(invoice.amount)}
+                  </Table.Td>
                   <Table.Td>
                     {invoice.adjCode === "No Adjustments" ? (
                       <Text c="dimmed" fs="italic">
@@ -177,7 +182,7 @@ const InvoiceTable = () => {
             })}
             {/* Totals Row */}
             <Table.Tr>
-              <Table.Td colSpan={4} align="right">
+              <Table.Td colSpan={5} align="right">
                 <Text fw={600}>Totals:</Text>
               </Table.Td>
               <Table.Td>
