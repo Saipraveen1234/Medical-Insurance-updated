@@ -46,11 +46,17 @@ class InsuranceService:
 
     def process_file(self, file_content: str, plan_name: str) -> None:
         try:
-            # Extract file info
+# Extract file info
             parts = plan_name.split('-')
-            base_plan = parts[0]  # UHC2000, UHC3000, UHG
-            month = parts[1]      # OCT
-            year = int(parts[2])  # 2024
+            base_plan = parts[0]  # UHG, UHC
+            
+            if base_plan == 'UHG':
+                month = parts[1]      # OCT
+                year = int(parts[2])  # 2024
+            else:
+                base_plan = f"{parts[0]}-{parts[1]}"  # UHC-3000
+                month = parts[2]      # OCT
+                year = int(parts[3])  # 2024
 
             # Decode file content
             if ',' in file_content:
@@ -136,47 +142,48 @@ class InsuranceService:
     def get_invoice_data(self) -> List[Dict[str, Any]]:
         try:
             results = []
-            
-            # Get all files
             files = self.db.query(InsuranceFile).all()
             
             for file in files:
-                # Get employees for this file
                 employees = (
                     self.db.query(Employee)
                     .filter(Employee.insurance_file_id == file.id)
                     .all()
                 )
 
-                # Group by plan type
                 plan_groups = {}
+                # Format the date to match your coverage_dates format "MM/DD/YYYY"
+                current_month_date = f"12/01/2024" if file.month == "DEC" else "10/01/2024"
                 
                 for emp in employees:
                     if emp.plan not in plan_groups:
                         plan_groups[emp.plan] = {
-                            'oct_amount': 0,
-                            'other_amount': 0
+                            'current_month': 0,
+                            'previous_month': 0
                         }
 
                     amount = float(emp.charge_amount)
+                    coverage_dates = emp.coverage_dates or ""
                     
-                    if emp.coverage_dates and '10/01/2024' in emp.coverage_dates:
-                        plan_groups[emp.plan]['oct_amount'] += amount
+                    # Check if coverage dates contain the current month date
+                    if current_month_date in coverage_dates:
+                        plan_groups[emp.plan]['current_month'] += amount
                     else:
-                        # Only add to other_amount if not a duplicate no-adjustment record
+                        # Only add to previous_month if not a duplicate no-adjustment record
                         if emp.status != 'No Adjustments' or not any(
                             e for e in employees 
                             if e != emp and 
                             e.subscriber_name == emp.subscriber_name and 
                             e.status == 'No Adjustments' and
-                            e.plan == emp.plan
+                            e.plan == emp.plan and
+                            current_month_date in (e.coverage_dates or "")
                         ):
-                            plan_groups[emp.plan]['other_amount'] += amount
+                            plan_groups[emp.plan]['previous_month'] += amount
 
                 # Create summaries for each plan group
                 for plan_type, amounts in plan_groups.items():
                     # Skip empty or zero-amount plans
-                    if amounts['oct_amount'] == 0 and amounts['other_amount'] == 0:
+                    if amounts['current_month'] == 0 and amounts['previous_month'] == 0:
                         continue
                         
                     # Skip 'UHG-OTHER' if we have specific UHG categories
@@ -187,9 +194,9 @@ class InsuranceService:
                         'planType': plan_type,
                         'month': file.month,
                         'year': file.year,
-                        'currentMonthTotal': amounts['oct_amount'],
-                        'previousMonthsTotal': amounts['other_amount'],
-                        'grandTotal': amounts['oct_amount'] + amounts['other_amount']
+                        'currentMonthTotal': amounts['current_month'],
+                        'previousMonthsTotal': amounts['previous_month'],
+                        'grandTotal': amounts['current_month'] + amounts['previous_month']
                     })
 
             return results

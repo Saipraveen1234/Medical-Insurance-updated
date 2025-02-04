@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Text, Group } from '@mantine/core';
+import React from "react";
+import { Box, Text, Group } from "@mantine/core";
 
 interface NavButtonProps {
   icon: React.ReactNode;
@@ -8,25 +8,27 @@ interface NavButtonProps {
   onClick?: () => void;
 }
 
-const NavButton: React.FC<NavButtonProps> = ({ icon, label, active, onClick }) => {
+const NavButton: React.FC<NavButtonProps> = ({
+  icon,
+  label,
+  active,
+  onClick,
+}) => {
   return (
     <Box
       onClick={onClick}
-      sx={{
-        width: '100%',
-        padding: '16px 24px',
-        backgroundColor: active ? '#1a1d20' : 'transparent',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        marginBottom: '8px',
-        '&:hover': {
-          backgroundColor: '#1a1d20',
-        }
+      style={{
+        width: "100%",
+        padding: "16px 24px",
+        backgroundColor: active ? "#1a1d20" : "#2A3036", // Change to match navbar background
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+        marginBottom: "8px",
       }}
     >
-      <Group spacing="sm">
+      <Group>
         {icon}
-        <Text size="md" c="white" fw={500} sx={{ lineHeight: '1.8' }}>
+        <Text size="md" color="white" fw={500} style={{ lineHeight: "1.8" }}>
           {label}
         </Text>
       </Group>
