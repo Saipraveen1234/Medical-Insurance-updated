@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { useQuery } from "@apollo/client";
 import {
   Container,
@@ -27,6 +28,8 @@ const GET_INVOICE_DATA = gql`
 `;
 
 const InvoiceSummaryDashboard = () => {
+  const [expandedItems, setExpandedItems] = useState([]);
+  
   const { data, loading, error } = useQuery(GET_INVOICE_DATA, {
     fetchPolicy: "network-only",
   });
