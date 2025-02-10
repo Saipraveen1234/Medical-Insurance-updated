@@ -1,24 +1,24 @@
-import React, { useState } from 'react';
-import { 
-  Container, 
-  Title, 
-  Card, 
-  Group, 
-  Text, 
+import React, { useState } from "react";
+import {
+  Container,
+  Title,
+  Card,
+  Group,
+  Text,
   Table,
   Modal,
   Stack,
   Button,
-  ActionIcon
-} from '@mantine/core';
-import { useQuery, useMutation } from '@apollo/client';
-import { notifications } from '@mantine/notifications';
-import { IconTrash } from '@tabler/icons-react';
-import { GET_UPLOADED_FILES } from '../graphql/queries';
-import { DELETE_FILE } from '../graphql/mutations';
-import FileUpload from './FileUpload';
-import { LoadingSpinner } from './shared/LoadingSpinner';
-import { ErrorMessage } from './shared/ErrorMessage';
+  ActionIcon,
+} from "@mantine/core";
+import { useQuery, useMutation } from "@apollo/client";
+import { notifications } from "@mantine/notifications";
+import { IconTrash } from "@tabler/icons-react";
+import { GET_UPLOADED_FILES, GET_INVOICE_DATA } from "../graphql/queries";
+import { DELETE_FILE } from "../graphql/mutations";
+import FileUpload from "./FileUpload";
+import { LoadingSpinner } from "./shared/LoadingSpinner";
+import { ErrorMessage } from "./shared/ErrorMessage";
 
 const Datasets = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -26,7 +26,7 @@ const Datasets = () => {
 
   // Query for getting uploaded files
   const { data, loading, error, refetch } = useQuery(GET_UPLOADED_FILES, {
-    fetchPolicy: 'network-only' // This ensures we always get fresh data
+    fetchPolicy: "network-only", // This ensures we always get fresh data
   });
 
   // Delete mutation
@@ -34,27 +34,31 @@ const Datasets = () => {
     onCompleted: (data) => {
       if (data.deleteFile.success) {
         notifications.show({
-          title: 'Success',
-          message: 'File deleted successfully',
-          color: 'green'
+          title: "Success",
+          message: "File deleted successfully", 
+          color: "green",
         });
-        refetch(); // Refresh the list after successful deletion
+        refetch();
       } else {
         notifications.show({
-          title: 'Error',
-          message: data.deleteFile.message || 'Failed to delete file',
-          color: 'red'
+          title: "Error",
+          message: data.deleteFile.message || "Failed to delete file",
+          color: "red",
         });
       }
     },
     onError: (error) => {
       notifications.show({
-        title: 'Error',
-        message: error.message || 'Failed to delete file',
-        color: 'red'
+        title: "Error", 
+        message: error.message || "Failed to delete file",
+        color: "red",
       });
-    }
-  });
+    },
+    refetchQueries: [
+      { query: GET_UPLOADED_FILES },
+      { query: GET_INVOICE_DATA } // Added to refresh dashboard data
+    ],
+   });
 
   const handleDeleteClick = (planName: string) => {
     setSelectedFile(planName);
@@ -66,10 +70,10 @@ const Datasets = () => {
 
     try {
       await deleteFile({
-        variables: { planName: selectedFile }
+        variables: { planName: selectedFile },
       });
     } catch (error) {
-      console.error('Delete error:', error);
+      console.error("Delete error:", error);
     } finally {
       setDeleteModalOpen(false);
       setSelectedFile(null);
@@ -81,14 +85,14 @@ const Datasets = () => {
 
   return (
     <Container size="xl">
-      <Stack spacing="lg">
+      <Stack>
         <Group justify="space-between" align="center">
           <Title order={2}>Datasets</Title>
           <FileUpload onUploadSuccess={() => refetch()} />
         </Group>
 
         <Card shadow="sm" p="lg" radius="md" withBorder>
-          <Stack spacing="md">
+          <Stack>
             <Title order={3}>Uploaded Files</Title>
 
             {data?.getUploadedFiles?.length > 0 ? (
@@ -106,13 +110,17 @@ const Datasets = () => {
                     <Table.Tr key={file.planName}>
                       <Table.Td>{file.fileName}</Table.Td>
                       <Table.Td>{file.planName}</Table.Td>
-                      <Table.Td>{new Date(file.uploadDate).toLocaleString()}</Table.Td>
+                      <Table.Td>
+                        {new Date(file.uploadDate).toLocaleString()}
+                      </Table.Td>
                       <Table.Td>
                         <ActionIcon
                           variant="light"
                           color="red"
                           onClick={() => handleDeleteClick(file.planName)}
-                          loading={deleteLoading && selectedFile === file.planName}
+                          loading={
+                            deleteLoading && selectedFile === file.planName
+                          }
                           disabled={deleteLoading}
                         >
                           <IconTrash size={16} />
@@ -138,11 +146,16 @@ const Datasets = () => {
           setDeleteModalOpen(false);
           setSelectedFile(null);
         }}
-        title={<Text size="lg" fw={500}>Confirm Delete</Text>}
+        title={
+          <Text size="lg" fw={500}>
+            Confirm Delete
+          </Text>
+        }
       >
         <Stack spacing="md">
           <Text>
-            Are you sure you want to delete this file? This action cannot be undone.
+            Are you sure you want to delete this file? This action cannot be
+            undone.
           </Text>
           <Group justify="flex-end">
             <Button

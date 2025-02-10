@@ -46,7 +46,7 @@ class InsuranceService:
 
     def process_file(self, file_content: str, plan_name: str) -> None:
         try:
-# Extract file info
+            # Extract file info
             parts = plan_name.split('-')
             base_plan = parts[0]  # UHG, UHC
             
@@ -66,10 +66,10 @@ class InsuranceService:
 
             # Read file
             try:
-                df = pd.read_excel(file_buffer)
+                df = pd.read_excel(file_buffer, skiprows=1)
             except:
                 file_buffer.seek(0)
-                df = pd.read_csv(file_buffer)
+                df = pd.read_csv(file_buffer, skiprows=1)
 
             # Create insurance file record
             insurance_file = InsuranceFile(
@@ -138,72 +138,121 @@ class InsuranceService:
         except Exception as e:
             self.db.rollback()
             raise ValueError(f"Error processing file: {str(e)}")
-
     def get_invoice_data(self) -> List[Dict[str, Any]]:
-        try:
-            results = []
-            files = self.db.query(InsuranceFile).all()
-            
-            for file in files:
-                employees = (
-                    self.db.query(Employee)
-                    .filter(Employee.insurance_file_id == file.id)
-                    .all()
-                )
-
-                plan_groups = {}
-                # Format the date to match your coverage_dates format "MM/DD/YYYY"
-                current_month_date = f"12/01/2024" if file.month == "DEC" else "10/01/2024"
+            try:
+                results = []
+                files = self.db.query(InsuranceFile).all()
                 
-                for emp in employees:
-                    if emp.plan not in plan_groups:
-                        plan_groups[emp.plan] = {
-                            'current_month': 0,
-                            'previous_month': 0
-                        }
+                for file in files:
+                    employees = (
+                        self.db.query(Employee)
+                        .filter(Employee.insurance_file_id == file.id)
+                        .all()
+                    )
 
-                    amount = float(emp.charge_amount)
-                    coverage_dates = emp.coverage_dates or ""
+                    plan_groups = {}
+                    # Format the date to match your coverage_dates format "MM/DD/YYYY"
+                    month_map = {
+                        'DEC': '12',
+                        'OCT': '10',
+                        'AUG': '08'
+                    }
+                    current_month = month_map.get(file.month, '01')
+                    current_month_date = f"{current_month}/01/{file.year}"
                     
-                    # Check if coverage dates contain the current month date
-                    if current_month_date in coverage_dates:
-                        plan_groups[emp.plan]['current_month'] += amount
-                    else:
-                        # Only add to previous_month if not a duplicate no-adjustment record
-                        if emp.status != 'No Adjustments' or not any(
-                            e for e in employees 
-                            if e != emp and 
-                            e.subscriber_name == emp.subscriber_name and 
-                            e.status == 'No Adjustments' and
-                            e.plan == emp.plan and
-                            current_month_date in (e.coverage_dates or "")
-                        ):
+                    for emp in employees:
+                        if emp.plan not in plan_groups:
+                            plan_groups[emp.plan] = {
+                                'current_month': 0,
+                                'previous_month': 0
+                            }
+
+                        amount = float(emp.charge_amount)
+                        if not amount:
+                            continue
+
+                        coverage_dates = emp.coverage_dates or ""
+                        coverage_start = coverage_dates.split('-')[0].strip() if '-' in coverage_dates else ''
+                        
+                        if coverage_start.startswith(f"{current_month}/"):
+                            plan_groups[emp.plan]['current_month'] += amount
+                        else:
                             plan_groups[emp.plan]['previous_month'] += amount
 
-                # Create summaries for each plan group
-                for plan_type, amounts in plan_groups.items():
-                    # Skip empty or zero-amount plans
-                    if amounts['current_month'] == 0 and amounts['previous_month'] == 0:
-                        continue
-                        
-                    # Skip 'UHG-OTHER' if we have specific UHG categories
-                    if plan_type == 'UHG-OTHER' and any(k.startswith('UHG-') for k in plan_groups.keys()):
-                        continue
-                        
-                    results.append({
-                        'planType': plan_type,
-                        'month': file.month,
-                        'year': file.year,
-                        'currentMonthTotal': amounts['current_month'],
-                        'previousMonthsTotal': amounts['previous_month'],
-                        'grandTotal': amounts['current_month'] + amounts['previous_month']
-                    })
+                    # Create summaries for each plan group
+                    for plan_type, amounts in plan_groups.items():
+                        # Skip empty or zero-amount plans
+                        if amounts['current_month'] == 0 and amounts['previous_month'] == 0:
+                            continue
+                            
+                        # Skip 'UHG-OTHER' if we have specific UHG categories
+                        if plan_type == 'UHG-OTHER' and any(k.startswith('UHG-') for k in plan_groups.keys()):
+                            continue
+                            
+                        results.append({
+                            'planType': plan_type,
+                            'month': file.month,
+                            'year': file.year,
+                            'currentMonthTotal': amounts['current_month'],
+                            'previousMonthsTotal': amounts['previous_month'],
+                            'grandTotal': amounts['current_month'] + amounts['previous_month']
+                        })
 
-            return results
+                return results
 
+            except Exception as e:
+                print(f"Error getting invoice data: {str(e)}")
+                return []
+
+    def get_uploaded_files(self) -> List[Dict[str, str]]:
+        try:
+            files = self.db.query(InsuranceFile).order_by(InsuranceFile.upload_date.desc()).all()
+            return [{
+                'planName': file.plan_name,
+                'fileName': file.file_name,
+                'uploadDate': file.upload_date.strftime('%Y-%m-%d %H:%M:%S')
+            } for file in files]
         except Exception as e:
-            print(f"Error getting invoice data: {str(e)}")
+            print(f"Error getting uploaded files: {str(e)}")
             return []
+
+    def delete_file(self, plan_name: str) -> None:
+        try:
+            file = self.db.query(InsuranceFile).filter_by(plan_name=plan_name).first()
+            if not file:
+                raise ValueError(f"File not found: {plan_name}")
+            
+            self.db.delete(file)
+            self.db.commit()
+            
+        except Exception as e:
+            self.db.rollback()
+            raise ValueError(str(e))
+
+    def get_uploaded_files(self) -> List[Dict[str, str]]:
+        try:
+            files = self.db.query(InsuranceFile).order_by(InsuranceFile.upload_date.desc()).all()
+            return [{
+                'planName': file.plan_name,
+                'fileName': file.file_name,
+                'uploadDate': file.upload_date.strftime('%Y-%m-%d %H:%M:%S')
+            } for file in files]
+        except Exception as e:
+            print(f"Error getting uploaded files: {str(e)}")
+            return []
+
+    def delete_file(self, plan_name: str) -> None:
+        try:
+            file = self.db.query(InsuranceFile).filter_by(plan_name=plan_name).first()
+            if not file:
+                raise ValueError(f"File not found: {plan_name}")
+            
+            self.db.delete(file)
+            self.db.commit()
+            
+        except Exception as e:
+            self.db.rollback()
+            raise ValueError(str(e))
 
     def get_uploaded_files(self) -> List[Dict[str, str]]:
         try:

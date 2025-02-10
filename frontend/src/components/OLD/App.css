@@ -46,13 +46,15 @@
   color: #888;
 }
 
-/* Updated Invoice Summary Table Styles */
+/* Updated styles for the Invoice Summary Table alignment */
+
+/* Ensure tables use fixed layout so column widths remain consistent */
 .invoice-summary-table {
   table-layout: fixed;
   width: 100%;
-  border-collapse: collapse;
 }
 
+/* Apply consistent padding, border, and vertical alignment for table cells */
 .invoice-summary-table th,
 .invoice-summary-table td {
   padding: 12px 16px;
@@ -60,69 +62,43 @@
   border: 1px solid #dee2e6;
 }
 
-/* Column Widths */
+/* First column (Plan Type) is wider and left-aligned */
 .invoice-summary-table th:first-child,
 .invoice-summary-table td:first-child {
-  width: 30%;
   text-align: left;
+  width: 200px;
 }
 
+/* Other (numeric) columns are right-aligned and have fixed width */
 .invoice-summary-table th:not(:first-child),
 .invoice-summary-table td:not(:first-child) {
-  width: 23.33%;
-  text-align: left;
+  text-align: right;
+  width: 150px;
 }
 
-/* Header Styling */
+/* Header row styling for clarity */
 .invoice-summary-table th {
-  background-color: #f8f9fa;
+  background-color: #f5f5f5;
   font-weight: 600;
 }
 
-/* Accordion Integration */
-.mantine-Accordion-content {
-  padding: 0 !important;
+/* Styling for total boxes, if rendered as separate elements */
+.total-box {
+  background-color: #f5f5f5;
+  border: 1px solid #dee2e6;
+  text-align: center;
+  font-weight: bold;
+  padding: 12px 16px;
+  margin-top: 8px;
 }
 
-.mantine-Accordion-control {
-  padding: 12px 16px !important;
-  background-color: #f8f9fa !important;
-}
-
-/* Align accordion header with table columns */
-.mantine-Accordion-control > .mantine-Group {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 25% 25% 25% 25%;
-  align-items: center;
-}
-
-/* Badge Alignment */
-.mantine-Badge-inner {
-  justify-content: flex-start;
-}
-
-/* Total Row Styling */
-.total-row {
-  background-color: #e9ecef !important;
-  font-weight: 700;
-}
-
-/* Responsive Handling */
+/* Responsive adjustments for smaller screens */
 @media (max-width: 768px) {
-  .invoice-summary-table {
+  .invoice-summary-table th,
+  .invoice-summary-table td {
     display: block;
-    overflow-x: auto;
-  }
-
-  .mantine-Accordion-control > .mantine-Group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .invoice-summary-table th:not(:first-child),
-  .invoice-summary-table td:not(:first-child) {
-    text-align: right !important;
+    width: 100% !important;
+    text-align: left !important;
+    box-sizing: border-box;
   }
 }

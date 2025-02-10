@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@apollo/client";
 import {
   Container,
@@ -9,9 +9,12 @@ import {
   Stack,
   Accordion,
   Group,
+  Pagination,
+  SegmentedControl,
 } from "@mantine/core";
 import { gql } from "@apollo/client";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
+import "./InvoiceSummaryDashboard.css";
 import { ErrorMessage } from "./shared/ErrorMessage";
 
 const GET_INVOICE_DATA = gql`
@@ -27,71 +30,107 @@ const GET_INVOICE_DATA = gql`
   }
 `;
 
+interface InvoiceData {
+  planType: string;
+  month: string;
+  year: number;
+  currentMonthTotal: number;
+  previousMonthsTotal: number;
+  grandTotal: number;
+}
+
 const InvoiceSummaryDashboard = () => {
-  const [expandedItems, setExpandedItems] = useState([]);
-  
-  const { data, loading, error } = useQuery(GET_INVOICE_DATA, {
-    fetchPolicy: "network-only",
-  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [planFilter, setPlanFilter] = useState<"ALL" | "UHC" | "UHG">("ALL");
+  const itemsPerPage = 10;
 
-  if (loading) return <LoadingSpinner />;
-  if (error) {
-    console.error("GraphQL Error:", error);
-    return <ErrorMessage message={error.message} />;
-  }
-  if (!data?.getInvoiceData || data.getInvoiceData.length === 0) {
-    return (
-      <Container size="xl">
-        <Card shadow="sm" p="lg" radius="md">
-          <Text c="dimmed" align="center">
-            No invoice data available. Please upload files through the Datasets tab.
-          </Text>
-        </Card>
-      </Container>
+  const { data, loading, error } = useQuery<{ getInvoiceData: InvoiceData[] }>(
+    GET_INVOICE_DATA,
+    { fetchPolicy: "cache-first" }
+  );
+
+  const groupedByMonth = useMemo(() => {
+    if (!data?.getInvoiceData) return {};
+
+    const filteredData = data.getInvoiceData.filter((item) => {
+      if (planFilter === "ALL") return true;
+      return item.planType.startsWith(planFilter);
+    });
+
+    return filteredData.reduce(
+      (acc: Record<string, any>, item: InvoiceData) => {
+        const monthKey = `${item.month}-${item.year}`;
+        if (!acc[monthKey]) {
+          acc[monthKey] = {
+            month: item.month,
+            year: item.year,
+            uhcPlans: [],
+            uhgPlans: [],
+          };
+        }
+        if (item.planType.startsWith("UHC")) {
+          acc[monthKey].uhcPlans.push(item);
+        } else if (item.planType.startsWith("UHG")) {
+          acc[monthKey].uhgPlans.push(item);
+        }
+        return acc;
+      },
+      {}
     );
-  }
-
-  const groupedByMonth = data.getInvoiceData.reduce((acc, item) => {
-    const monthKey = `${item.month}-${item.year}`;
-    if (!acc[monthKey]) {
-      acc[monthKey] = {
-        month: item.month,
-        year: item.year,
-        uhcPlans: [],
-        uhgPlans: [],
-      };
-    }
-    if (item.planType.startsWith("UHC")) {
-      acc[monthKey].uhcPlans.push(item);
-    } else if (item.planType.startsWith("UHG-")) {
-      acc[monthKey].uhgPlans.push(item);
-    }
-    return acc;
-  }, {});
+  }, [data, planFilter]);
 
   const monthOrder = [
-    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
   ];
-  const sortedMonths = Object.entries(groupedByMonth).sort(([keyA], [keyB]) => {
-    const [monthA, yearA] = keyA.split("-");
-    const [monthB, yearB] = keyB.split("-");
-    if (yearA !== yearB) return parseInt(yearB) - parseInt(yearA);
-    return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
-  });
 
-  const cellStyle = { padding: "8px", textAlign: "center" };
+  const sortedMonths = useMemo(() => {
+    return Object.entries(groupedByMonth).sort(([keyA], [keyB]) => {
+      const [monthA, yearA] = keyA.split("-");
+      const [monthB, yearB] = keyB.split("-");
+      if (yearA !== yearB) return parseInt(yearB) - parseInt(yearA);
+      return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
+    });
+  }, [groupedByMonth]);
 
-  const formatAmount = (amount) => {
-    const formatted = `$${Math.abs(amount).toFixed(2)}`;
+  const totalPages = useMemo(
+    () => Math.ceil(sortedMonths.length / itemsPerPage),
+    [sortedMonths, itemsPerPage]
+  );
+
+  const currentItems = useMemo(() => {
+    return sortedMonths.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [sortedMonths, currentPage, itemsPerPage]);
+
+  const cellStyle = { padding: "8px", textAlign: "center" } as const;
+
+  const formatAmount = (amount: number) => {
+    const formatted = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(Math.abs(amount));
+
     return (
-      <Text fw={500} c={amount < 0 ? "red" : "inherit"} align="center">
+      <Text component="div" fw={500} c={amount < 0 ? "red" : "inherit"}>
         {amount < 0 ? `-${formatted}` : formatted}
       </Text>
     );
   };
 
-  const getPlanBadgeColor = (planType) => {
+  const getPlanBadgeColor = (planType: string) => {
     if (planType === "UHC-2000") return "blue";
     if (planType === "UHC-3000") return "green";
     if (planType === "UHG-LIFE") return "violet";
@@ -100,240 +139,281 @@ const InvoiceSummaryDashboard = () => {
     return "gray";
   };
 
-  const formatPlanType = (planType) => {
+  const formatPlanType = (planType: string) => {
     if (planType.startsWith("UHG-")) {
       return planType.split("-")[1];
     }
     return planType.replace(/([A-Z])(\d)/g, "$1 $2");
   };
 
-  const calculateGroupTotals = (plans) => {
+  const calculateGroupTotals = (plans: InvoiceData[]) => {
     return plans.reduce(
       (acc, curr) => ({
         previousMonthsTotal: acc.previousMonthsTotal + curr.previousMonthsTotal,
         currentMonthTotal: acc.currentMonthTotal + curr.currentMonthTotal,
         grandTotal: acc.grandTotal + curr.grandTotal,
       }),
-      {
-        previousMonthsTotal: 0,
-        currentMonthTotal: 0,
-        grandTotal: 0,
-      }
+      { previousMonthsTotal: 0, currentMonthTotal: 0, grandTotal: 0 }
     );
   };
 
-  const renderMonthData = (monthKey, monthData) => {
+  const renderMonthData = (monthKey: string, monthData: any) => {
     const uhcTotals = calculateGroupTotals(monthData.uhcPlans);
     const uhgTotals = calculateGroupTotals(monthData.uhgPlans);
 
-    const headerLabelStyle = { flex: "0 0 20%", textAlign: "left" };
-    const headerValueStyle = { flex: "1", textAlign: "center" };
+    const headerLabelStyle = { flex: "0 0 20%", textAlign: "left" } as const;
+    const headerValueStyle = { flex: "1", textAlign: "center" } as const;
 
     return (
-      <Accordion variant="contained" multiple>
-        {monthData.uhcPlans.length > 0 && (
-          <Accordion.Item value={`${monthKey}-uhc`}>
-            <Accordion.Control>
-              <Group style={{ width: "100%" }} noWrap>
-                <Text fw={700} style={headerLabelStyle}>
-                  UHC
-                </Text>
-                <div style={headerValueStyle}>
-                  {formatAmount(uhcTotals.previousMonthsTotal)}
-                </div>
-                <div style={headerValueStyle}>
-                  {formatAmount(uhcTotals.currentMonthTotal)}
-                </div>
-                <div style={headerValueStyle}>
-                  {formatAmount(uhcTotals.grandTotal)}
-                </div>
-              </Group>
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Table highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th style={cellStyle}>Plan Type</Table.Th>
-                    <Table.Th style={cellStyle}>Previous Months Adjustments</Table.Th>
-                    <Table.Th style={cellStyle}>Current Month Amount</Table.Th>
-                    <Table.Th style={cellStyle}>Total</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {monthData.uhcPlans.map((plan, index) => (
-                    <Table.Tr key={`${monthKey}-uhc-${plan.planType}-${index}`}>
-                      <Table.Td style={cellStyle}>
-                        <Badge
-                          color={getPlanBadgeColor(plan.planType)}
-                          variant="light"
-                          size="lg"
-                        >
-                          {formatPlanType(plan.planType)}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td style={cellStyle}>
-                        {formatAmount(plan.previousMonthsTotal)}
-                      </Table.Td>
-                      <Table.Td style={cellStyle}>
-                        {formatAmount(plan.currentMonthTotal)}
-                      </Table.Td>
-                      <Table.Td style={cellStyle}>
-                        {formatAmount(plan.grandTotal)}
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                  <Table.Tr style={{ backgroundColor: "#f8f9fa" }}>
-                    <Table.Td style={cellStyle}>
-                      <Text fw={700}>UHC Total:</Text>
-                    </Table.Td>
-                    <Table.Td style={cellStyle} colSpan={3}>
-                      <Text fw={700}>{formatAmount(uhcTotals.grandTotal)}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                </Table.Tbody>
-              </Table>
-            </Accordion.Panel>
-          </Accordion.Item>
-        )}
-        {monthData.uhgPlans.length > 0 && (
-          <Accordion.Item value={`${monthKey}-uhg`}>
-            <Accordion.Control>
-              <Group style={{ width: "100%" }} noWrap>
-                <Text fw={700} style={headerLabelStyle}>
-                  UHG
-                </Text>
-                <div style={headerValueStyle}>
-                  {formatAmount(uhgTotals.previousMonthsTotal)}
-                </div>
-                <div style={headerValueStyle}>
-                  {formatAmount(uhgTotals.currentMonthTotal)}
-                </div>
-                <div style={headerValueStyle}>
-                  {formatAmount(uhgTotals.grandTotal)}
-                </div>
-              </Group>
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Table highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th style={cellStyle}>Plan Type</Table.Th>
-                    <Table.Th style={cellStyle}>Previous Months Adjustments</Table.Th>
-                    <Table.Th style={cellStyle}>Current Month Amount</Table.Th>
-                    <Table.Th style={cellStyle}>Total</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {monthData.uhgPlans.map((plan, index) => (
-                    <Table.Tr key={`${monthKey}-uhg-${plan.planType}-${index}`}>
-                      <Table.Td style={cellStyle}>
-                        <Badge
-                          color={getPlanBadgeColor(plan.planType)}
-                          variant="light"
-                          size="lg"
-                        >
-                          {formatPlanType(plan.planType)}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td style={cellStyle}>
-                        {formatAmount(plan.previousMonthsTotal)}
-                      </Table.Td>
-                      <Table.Td style={cellStyle}>
-                        {formatAmount(plan.currentMonthTotal)}
-                      </Table.Td>
-                      <Table.Td style={cellStyle}>
-                        {formatAmount(plan.grandTotal)}
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                  <Table.Tr style={{ backgroundColor: "#f8f9fa" }}>
-                    <Table.Td style={cellStyle}>
-                      <Text fw={700}>UHG Total:</Text>
-                    </Table.Td>
-                    <Table.Td style={cellStyle} colSpan={3}>
-                      <Text fw={700}>{formatAmount(uhgTotals.grandTotal)}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                </Table.Tbody>
-              </Table>
-            </Accordion.Panel>
-          </Accordion.Item>
-        )}
-      </Accordion>
+      <Table highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={cellStyle}>Plan Type</Table.Th>
+            <Table.Th style={cellStyle}>Previous Months Adjustments</Table.Th>
+            <Table.Th style={cellStyle}>Current Month Amount</Table.Th>
+            <Table.Th style={cellStyle}>Total</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          <Table.Tr>
+            <Table.Td colSpan={4}>
+              <Accordion variant="contained" multiple>
+                {monthData.uhcPlans.length > 0 && planFilter !== "UHG" && (
+                  <Accordion.Item value={`${monthKey}-uhc`}>
+                    <Accordion.Control
+                      aria-label={`Toggle UHC details for ${monthKey}`}
+                    >
+                      <Group style={{ width: "100%" }} wrap="wrap">
+                        <Text component="div" fw={700} style={headerLabelStyle}>
+                          UHC
+                        </Text>
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhcTotals.previousMonthsTotal)}
+                        </div>
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhcTotals.currentMonthTotal)}
+                        </div>
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhcTotals.grandTotal)}
+                        </div>
+                      </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Table className="invoice-summary-table">
+                        <Table.Tbody>
+                          {monthData.uhcPlans.map(
+                            (plan: InvoiceData, index: number) => (
+                              <Table.Tr
+                                key={`${monthKey}-uhc-${plan.planType}-${index}`}
+                              >
+                                <Table.Td style={cellStyle}>
+                                  <Badge
+                                    color={getPlanBadgeColor(plan.planType)}
+                                    variant="light"
+                                    size="lg"
+                                  >
+                                    {formatPlanType(plan.planType)}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.previousMonthsTotal)}
+                                </Table.Td>
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.currentMonthTotal)}
+                                </Table.Td>
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.grandTotal)}
+                                </Table.Td>
+                              </Table.Tr>
+                            )
+                          )}
+                        </Table.Tbody>
+                      </Table>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                )}
+                {monthData.uhgPlans.length > 0 && planFilter !== "UHC" && (
+                  <Accordion.Item value={`${monthKey}-uhg`}>
+                    <Accordion.Control
+                      aria-label={`Toggle UHG details for ${monthKey}`}
+                    >
+                      <Group style={{ width: "100%" }} wrap="wrap">
+                        <Text component="div" fw={700} style={headerLabelStyle}>
+                          UHG
+                        </Text>
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhgTotals.previousMonthsTotal)}
+                        </div>
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhgTotals.currentMonthTotal)}
+                        </div>
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhgTotals.grandTotal)}
+                        </div>
+                      </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Table className="invoice-summary-table">
+                        <Table.Tbody>
+                          {monthData.uhgPlans.map(
+                            (plan: InvoiceData, index: number) => (
+                              <Table.Tr
+                                key={`${monthKey}-uhg-${plan.planType}-${index}`}
+                              >
+                                <Table.Td style={cellStyle}>
+                                  <Badge
+                                    color={getPlanBadgeColor(plan.planType)}
+                                    variant="light"
+                                    size="lg"
+                                  >
+                                    {formatPlanType(plan.planType)}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.previousMonthsTotal)}
+                                </Table.Td>
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.currentMonthTotal)}
+                                </Table.Td>
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.grandTotal)}
+                                </Table.Td>
+                              </Table.Tr>
+                            )
+                          )}
+                        </Table.Tbody>
+                      </Table>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                )}
+              </Accordion>
+            </Table.Td>
+          </Table.Tr>
+        </Table.Tbody>
+      </Table>
     );
   };
 
-  const overallTotals = sortedMonths.reduce(
-    (acc, [_, monthData]) => {
-      const monthTotals = calculateGroupTotals([
-        ...monthData.uhcPlans,
-        ...monthData.uhgPlans,
-      ]);
-      return {
-        grandTotal: acc.grandTotal + monthTotals.grandTotal,
-      };
-    },
-    { grandTotal: 0 }
-  );
+  const overallTotals = useMemo(() => {
+    return sortedMonths.reduce(
+      (acc, [_, monthData]) => {
+        const totals = calculateGroupTotals([
+          ...monthData.uhcPlans,
+          ...monthData.uhgPlans,
+        ]);
+        return { grandTotal: acc.grandTotal + totals.grandTotal };
+      },
+      { grandTotal: 0 }
+    );
+  }, [sortedMonths]);
+
+  let content;
+  if (loading) {
+    content = <LoadingSpinner />;
+  } else if (error) {
+    console.error("GraphQL Error:", error);
+    content = <ErrorMessage message={error.message} />;
+  } else if (!data?.getInvoiceData || data.getInvoiceData.length === 0) {
+    content = (
+      <Card shadow="sm" p="lg" radius="md">
+        <Text component="div" c="dimmed">
+          No invoice data available. Please upload files through the Datasets
+          tab.
+        </Text>
+      </Card>
+    );
+  } else {
+    content = (
+      <Stack>
+        <div className="filter-container">
+          <Text component="h2" className="filter-title">
+            Insurance Invoice Summary
+          </Text>
+          <SegmentedControl
+            value={planFilter}
+            onChange={(value: string) => {
+              setPlanFilter(value as "ALL" | "UHC" | "UHG");
+              setCurrentPage(1);
+            }}
+            data={[
+              { label: "All Plans", value: "ALL" },
+              { label: "UHC Only", value: "UHC" },
+              { label: "UHG Only", value: "UHG" },
+            ]}
+            aria-label="Filter plans"
+            styles={{
+              root: { minWidth: 400 },
+              label: { fontSize: "1rem" },
+              indicator: {
+                backgroundColor: "#228be6",
+                height: "38px",
+                borderRadius: "8px",
+              },
+            }}
+          />
+        </div>
+
+        <Accordion variant="contained" multiple>
+          {currentItems.map(([monthKey, monthData]) => (
+            <Accordion.Item key={monthKey} value={monthKey}>
+              <Accordion.Control aria-label={`Toggle ${monthKey} details`}>
+                <Group justify="space-between" wrap="nowrap">
+                  <Text component="div" fw={700} size="lg">
+                    {monthData.month} {monthData.year}
+                  </Text>
+                  <Text component="div" fw={700} c="blue">
+                    {formatAmount(
+                      calculateGroupTotals([
+                        ...monthData.uhcPlans,
+                        ...monthData.uhgPlans,
+                      ]).grandTotal
+                    )}
+                  </Text>
+                </Group>
+              </Accordion.Control>
+              <Accordion.Panel>
+                {renderMonthData(monthKey, monthData)}
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
+        </Accordion>
+
+        <Table>
+          <Table.Tbody>
+            <Table.Tr className="total-row">
+              <Table.Td colSpan={3}>
+                <Text component="div" fw={700} size="lg">
+                  Overall Invoice Total:
+                </Text>
+              </Table.Td>
+              <Table.Td>
+                <Text component="div" fw={700} size="lg">
+                  {formatAmount(overallTotals.grandTotal)}
+                </Text>
+              </Table.Td>
+            </Table.Tr>
+          </Table.Tbody>
+        </Table>
+
+        {totalPages > 1 && (
+          <Pagination
+            total={totalPages}
+            value={currentPage}
+            onChange={setCurrentPage}
+            color="blue"
+            size="lg"
+            mt="xl"
+            aria-label="Invoice pagination"
+          />
+        )}
+      </Stack>
+    );
+  }
 
   return (
     <Container size="xl">
       <Card shadow="sm" p="lg" radius="md">
-        <Stack spacing="xl">
-          <Text size="xl" fw={700} align="center">
-            Insurance Invoice Summary
-          </Text>
-          <Accordion variant="contained">
-            {sortedMonths.map(([monthKey, monthData]) => (
-              <Accordion.Item key={monthKey} value={monthKey}>
-<Accordion.Control>
-  <Stack spacing={0}>
-    <Group justify="space-between" align="center" wrap="nowrap">
-      <Text fw={700}>
-        {monthData.month} {monthData.year}
-      </Text>
-      <Group wrap="nowrap" gap={4}>
-        <Text fw={700} size="lg">Total:</Text>
-        <Text fw={700} size="lg">
-          {formatAmount(
-            calculateGroupTotals([
-              ...monthData.uhcPlans,
-              ...monthData.uhgPlans,
-            ]).grandTotal
-          )}
-        </Text>
-      </Group>
-    </Group>
-    <Group mt={8} style={{ width: '100%' }}>
-      <Text size="xs" c="dimmed" style={{ flex: '1', textAlign: 'center', marginLeft: '25%' }}>Previous Months</Text>
-      <Text size="xs" c="dimmed" style={{ flex: '1', textAlign: 'center' }}>Current Month</Text>
-      <Text size="xs" c="dimmed" style={{ flex: '1', textAlign: 'center', marginRight: '5%' }}>Total</Text>
-    </Group>
-  </Stack>
-</Accordion.Control>
-                <Accordion.Panel>
-                  {renderMonthData(monthKey, monthData)}
-                </Accordion.Panel>
-              </Accordion.Item>
-            ))}
-          </Accordion>
-          <Table highlightOnHover>
-            <Table.Tbody>
-              <Table.Tr style={{ backgroundColor: "#f1f3f5" }}>
-                <Table.Td style={cellStyle}>
-                  <Text fw={700} size="lg" align="center">
-                    Overall Invoice Total:
-                  </Text>
-                </Table.Td>
-                <Table.Td style={cellStyle}>
-                  <Text fw={700} size="lg" align="center">
-                    {formatAmount(overallTotals.grandTotal)}
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            </Table.Tbody>
-          </Table>
-        </Stack>
+        {content}
       </Card>
     </Container>
   );
