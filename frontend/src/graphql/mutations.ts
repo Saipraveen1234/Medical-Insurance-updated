@@ -5,6 +5,7 @@ export const UPLOAD_FILE = gql`
     uploadFile(fileInput: $fileInput) {
       success
       message
+      error
     }
   }
 `;
@@ -14,6 +15,7 @@ export const DELETE_FILE = gql`
     deleteFile(planName: $planName) {
       success
       message
+      error
     }
   }
 `;

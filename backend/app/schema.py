@@ -28,7 +28,8 @@ class FileInput:
 @strawberry.type
 class OperationResult:
     success: bool
-    message: str
+    message: Optional[str] = None
+    error: Optional[str] = None
 
 @strawberry.type
 class Query:
@@ -67,18 +68,39 @@ class Mutation:
     def upload_file(self, info: Info, fileInput: FileInput) -> OperationResult:
         try:
             service = InsuranceService(info.context.db)
-            service.process_file(fileInput.content, fileInput.planName)
-            return OperationResult(success=True, message="File uploaded successfully")
+            result = service.process_file(fileInput.content, fileInput.planName)
+            
+            if isinstance(result, dict):
+                return OperationResult(
+                    success=result.get('success', False),
+                    message=result.get('message'),
+                    error=result.get('error')
+                )
+            
+            return OperationResult(
+                success=True,
+                message="File uploaded successfully"
+            )
+            
         except Exception as e:
-            return OperationResult(success=False, message=str(e))
+            return OperationResult(
+                success=False,
+                error=str(e)
+            )
 
     @strawberry.mutation
     def delete_file(self, info: Info, planName: str) -> OperationResult:
         try:
             service = InsuranceService(info.context.db)
             service.delete_file(planName)
-            return OperationResult(success=True, message="File deleted successfully")
+            return OperationResult(
+                success=True,
+                message="File deleted successfully"
+            )
         except Exception as e:
-            return OperationResult(success=False, message=str(e))
+            return OperationResult(
+                success=False,
+                error=str(e)
+            )
 
 schema = strawberry.Schema(query=Query, mutation=Mutation)

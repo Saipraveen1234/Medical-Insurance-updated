@@ -10,10 +10,13 @@ import {
   Stack,
   Button,
   ActionIcon,
+  Checkbox,
+  Transition,
+  Paper,
 } from "@mantine/core";
 import { useQuery, useMutation } from "@apollo/client";
 import { notifications } from "@mantine/notifications";
-import { IconTrash } from "@tabler/icons-react";
+import { IconTrash, IconAlertTriangle } from "@tabler/icons-react";
 import { GET_UPLOADED_FILES, GET_INVOICE_DATA } from "../graphql/queries";
 import { DELETE_FILE } from "../graphql/mutations";
 import FileUpload from "./FileUpload";
@@ -22,11 +25,12 @@ import { ErrorMessage } from "./shared/ErrorMessage";
 
 const Datasets = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Query for getting uploaded files
   const { data, loading, error, refetch } = useQuery(GET_UPLOADED_FILES, {
-    fetchPolicy: "network-only", // This ensures we always get fresh data
+    fetchPolicy: "network-only",
   });
 
   // Delete mutation
@@ -35,53 +39,70 @@ const Datasets = () => {
       if (data.deleteFile.success) {
         notifications.show({
           title: "Success",
-          message: "File deleted successfully", 
+          message: selectedFiles.length > 1 
+            ? "Files deleted successfully"
+            : "File deleted successfully",
           color: "green",
         });
+        setSelectedFiles([]);
+        setSelectAll(false);
         refetch();
       } else {
         notifications.show({
           title: "Error",
-          message: data.deleteFile.message || "Failed to delete file",
+          message: data.deleteFile.message || "Failed to delete files",
           color: "red",
         });
       }
     },
     onError: (error) => {
       notifications.show({
-        title: "Error", 
-        message: error.message || "Failed to delete file",
+        title: "Error",
+        message: error.message || "Failed to delete files",
         color: "red",
       });
     },
     refetchQueries: [
       { query: GET_UPLOADED_FILES },
-      { query: GET_INVOICE_DATA } // Added to refresh dashboard data
+      { query: GET_INVOICE_DATA }
     ],
-   });
+  });
 
-  const handleDeleteClick = (planName: string) => {
-    setSelectedFile(planName);
-    setDeleteModalOpen(true);
+  const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectAll(event.currentTarget.checked);
+    if (event.currentTarget.checked) {
+      setSelectedFiles(data.getUploadedFiles.map((file: any) => file.planName));
+    } else {
+      setSelectedFiles([]);
+    }
+  };
+
+  const handleSelectFile = (planName: string, checked: boolean) => {
+    if (checked) {
+      setSelectedFiles(prev => [...prev, planName]);
+    } else {
+      setSelectedFiles(prev => prev.filter(name => name !== planName));
+    }
   };
 
   const handleConfirmDelete = async () => {
-    if (!selectedFile) return;
-
     try {
-      await deleteFile({
-        variables: { planName: selectedFile },
-      });
+      // Delete files sequentially to avoid overwhelming the server
+      for (const planName of selectedFiles) {
+        await deleteFile({
+          variables: { planName },
+        });
+      }
+      setDeleteModalOpen(false);
     } catch (error) {
       console.error("Delete error:", error);
-    } finally {
-      setDeleteModalOpen(false);
-      setSelectedFile(null);
     }
   };
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error.message} />;
+
+  const hasSelectedFiles = selectedFiles.length > 0;
 
   return (
     <Container size="xl">
@@ -93,12 +114,46 @@ const Datasets = () => {
 
         <Card shadow="sm" p="lg" radius="md" withBorder>
           <Stack>
-            <Title order={3}>Uploaded Files</Title>
+            <Group position="apart">
+              <Title order={3}>Uploaded Files</Title>
+              <Transition mounted={hasSelectedFiles} transition="slide-left">
+                {(styles) => (
+                  <Paper 
+                    shadow="sm" 
+                    p="xs" 
+                    style={{ ...styles, backgroundColor: '#f8f9fa' }}
+                  >
+                    <Group>
+                      <Text size="sm" fw={500}>
+                        {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected
+                      </Text>
+                      <Button
+                        variant="light"
+                        color="red"
+                        size="xs"
+                        leftSection={<IconTrash size={14} />}
+                        onClick={() => setDeleteModalOpen(true)}
+                        loading={deleteLoading}
+                      >
+                        Delete Selected
+                      </Button>
+                    </Group>
+                  </Paper>
+                )}
+              </Transition>
+            </Group>
 
             {data?.getUploadedFiles?.length > 0 ? (
               <Table striped highlightOnHover withTableBorder>
                 <Table.Thead>
                   <Table.Tr>
+                    <Table.Th style={{ width: 40 }}>
+                      <Checkbox
+                        checked={selectAll}
+                        onChange={handleSelectAll}
+                        aria-label="Select all files"
+                      />
+                    </Table.Th>
                     <Table.Th>File Name</Table.Th>
                     <Table.Th>Plan Name</Table.Th>
                     <Table.Th>Upload Date</Table.Th>
@@ -108,6 +163,15 @@ const Datasets = () => {
                 <Table.Tbody>
                   {data.getUploadedFiles.map((file: any) => (
                     <Table.Tr key={file.planName}>
+                      <Table.Td>
+                        <Checkbox
+                          checked={selectedFiles.includes(file.planName)}
+                          onChange={(event) => 
+                            handleSelectFile(file.planName, event.currentTarget.checked)
+                          }
+                          aria-label={`Select ${file.fileName}`}
+                        />
+                      </Table.Td>
                       <Table.Td>{file.fileName}</Table.Td>
                       <Table.Td>{file.planName}</Table.Td>
                       <Table.Td>
@@ -117,10 +181,11 @@ const Datasets = () => {
                         <ActionIcon
                           variant="light"
                           color="red"
-                          onClick={() => handleDeleteClick(file.planName)}
-                          loading={
-                            deleteLoading && selectedFile === file.planName
-                          }
+                          onClick={() => {
+                            setSelectedFiles([file.planName]);
+                            setDeleteModalOpen(true);
+                          }}
+                          loading={deleteLoading && selectedFiles.includes(file.planName)}
                           disabled={deleteLoading}
                         >
                           <IconTrash size={16} />
@@ -144,25 +209,35 @@ const Datasets = () => {
         opened={deleteModalOpen}
         onClose={() => {
           setDeleteModalOpen(false);
-          setSelectedFile(null);
         }}
         title={
-          <Text size="lg" fw={500}>
-            Confirm Delete
-          </Text>
+          <Group gap="xs">
+            <IconAlertTriangle size={20} color="red" />
+            <Text size="lg" fw={500}>Confirm Delete</Text>
+          </Group>
         }
       >
         <Stack spacing="md">
           <Text>
-            Are you sure you want to delete this file? This action cannot be
-            undone.
+            {selectedFiles.length > 1
+              ? `Are you sure you want to delete these ${selectedFiles.length} files? This action cannot be undone.`
+              : "Are you sure you want to delete this file? This action cannot be undone."}
           </Text>
+          {selectedFiles.length > 1 && (
+            <Paper withBorder p="xs" bg="gray.0">
+              <Stack spacing="xs">
+                <Text size="sm" fw={500}>Selected files:</Text>
+                {selectedFiles.map(fileName => (
+                  <Text size="sm" key={fileName}>• {fileName}</Text>
+                ))}
+              </Stack>
+            </Paper>
+          )}
           <Group justify="flex-end">
             <Button
               variant="subtle"
               onClick={() => {
                 setDeleteModalOpen(false);
-                setSelectedFile(null);
               }}
             >
               Cancel
