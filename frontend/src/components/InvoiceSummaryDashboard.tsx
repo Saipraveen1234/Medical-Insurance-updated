@@ -11,6 +11,7 @@ import {
   Group,
   Pagination,
   SegmentedControl,
+  Box,
 } from "@mantine/core";
 import { gql } from "@apollo/client";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
@@ -80,18 +81,8 @@ const InvoiceSummaryDashboard = () => {
   }, [data, planFilter]);
 
   const monthOrder = [
-    "JAN",
-    "FEB",
-    "MAR",
-    "APR",
-    "MAY",
-    "JUN",
-    "JUL",
-    "AUG",
-    "SEP",
-    "OCT",
-    "NOV",
-    "DEC",
+    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
   ];
 
   const sortedMonths = useMemo(() => {
@@ -307,6 +298,67 @@ const InvoiceSummaryDashboard = () => {
     );
   }, [sortedMonths]);
 
+  const renderTotalSection = (total: number) => (
+    <Box mt="xl">
+      <Card
+        p="lg"
+        radius="md"
+        style={{
+          background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+          border: 'none',
+          transition: 'transform 0.2s ease',
+          cursor: 'default',
+        }}
+        className="total-section"
+      >
+        <Group position="apart" py="md">
+          <Stack spacing={2}>
+            <Text
+              size="xl"
+              weight={700}
+              style={{
+                color: 'rgba(255, 255, 255, 0.9)',
+                letterSpacing: '0.5px'
+              }}
+            >
+              Overall Invoice Total
+            </Text>
+            <Text
+              size="sm"
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)'
+              }}
+            >
+              All months combined
+            </Text>
+          </Stack>
+          <Box
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              padding: '16px 24px',
+              borderRadius: '12px',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            }}
+          >
+            <Text
+              size="28px"
+              weight={700}
+              style={{
+                color: 'white',
+                fontFamily: 'monospace',
+                letterSpacing: '0.5px',
+                textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              {formatAmount(total)}
+            </Text>
+          </Box>
+        </Group>
+      </Card>
+    </Box>
+  );
+
   let content;
   if (loading) {
     content = <LoadingSpinner />;
@@ -317,8 +369,7 @@ const InvoiceSummaryDashboard = () => {
     content = (
       <Card shadow="sm" p="lg" radius="md">
         <Text component="div" c="dimmed">
-          No invoice data available. Please upload files through the Datasets
-          tab.
+          No invoice data available. Please upload files through the Datasets tab.
         </Text>
       </Card>
     );
@@ -378,22 +429,8 @@ const InvoiceSummaryDashboard = () => {
           ))}
         </Accordion>
 
-        <Table>
-          <Table.Tbody>
-            <Table.Tr className="total-row">
-              <Table.Td colSpan={3}>
-                <Text component="div" fw={700} size="lg">
-                  Overall Invoice Total:
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <Text component="div" fw={700} size="lg">
-                  {formatAmount(overallTotals.grandTotal)}
-                </Text>
-              </Table.Td>
-            </Table.Tr>
-          </Table.Tbody>
-        </Table>
+        {/* Enhanced Total Section */}
+        {renderTotalSection(overallTotals.grandTotal)}
 
         {totalPages > 1 && (
           <Pagination
