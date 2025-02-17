@@ -1,4 +1,4 @@
-/* Existing app.css styles */
+/* Global Styles & Logo Animation */
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -29,10 +29,10 @@
   }
 }
 
+/* Input Focus Styles */
 .mantine-TextInput-input::placeholder {
   color: #adb5bd;
 }
-
 .mantine-TextInput-input:focus {
   border-color: #228be6;
   box-shadow: 0 0 0 1px #228be6;
@@ -52,10 +52,9 @@
   width: 100%;
   border-collapse: collapse;
 }
-
 .invoice-summary-table th,
 .invoice-summary-table td {
-  padding: 12px 16px;
+  padding: 0.75rem 1rem; /* converted from 12px 16px */
   vertical-align: middle;
   border: 1px solid #dee2e6;
 }
@@ -66,11 +65,10 @@
   width: 30%;
   text-align: left;
 }
-
 .invoice-summary-table th:not(:first-child),
 .invoice-summary-table td:not(:first-child) {
   width: 23.33%;
-  text-align: left;
+  text-align: right;
 }
 
 /* Header Styling */
@@ -83,12 +81,10 @@
 .mantine-Accordion-content {
   padding: 0 !important;
 }
-
 .mantine-Accordion-control {
-  padding: 12px 16px !important;
+  padding: 0.75rem 1rem !important;
   background-color: #f8f9fa !important;
 }
-
 /* Align accordion header with table columns */
 .mantine-Accordion-control > .mantine-Group {
   width: 100%;
@@ -114,13 +110,11 @@
     display: block;
     overflow-x: auto;
   }
-
   .mantine-Accordion-control > .mantine-Group {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 0.5rem;
   }
-
   .invoice-summary-table th:not(:first-child),
   .invoice-summary-table td:not(:first-child) {
     text-align: right !important;

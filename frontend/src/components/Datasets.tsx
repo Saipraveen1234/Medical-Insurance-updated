@@ -39,9 +39,10 @@ const Datasets = () => {
       if (data.deleteFile.success) {
         notifications.show({
           title: "Success",
-          message: selectedFiles.length > 1 
-            ? "Files deleted successfully"
-            : "File deleted successfully",
+          message:
+            selectedFiles.length > 1
+              ? "Files deleted successfully"
+              : "File deleted successfully",
           color: "green",
         });
         setSelectedFiles([]);
@@ -64,7 +65,7 @@ const Datasets = () => {
     },
     refetchQueries: [
       { query: GET_UPLOADED_FILES },
-      { query: GET_INVOICE_DATA }
+      { query: GET_INVOICE_DATA },
     ],
   });
 
@@ -79,9 +80,9 @@ const Datasets = () => {
 
   const handleSelectFile = (planName: string, checked: boolean) => {
     if (checked) {
-      setSelectedFiles(prev => [...prev, planName]);
+      setSelectedFiles((prev) => [...prev, planName]);
     } else {
-      setSelectedFiles(prev => prev.filter(name => name !== planName));
+      setSelectedFiles((prev) => prev.filter((name) => name !== planName));
     }
   };
 
@@ -114,18 +115,19 @@ const Datasets = () => {
 
         <Card shadow="sm" p="lg" radius="md" withBorder>
           <Stack>
-            <Group position="apart">
+            <Group justify="space-between">
               <Title order={3}>Uploaded Files</Title>
               <Transition mounted={hasSelectedFiles} transition="slide-left">
                 {(styles) => (
-                  <Paper 
-                    shadow="sm" 
-                    p="xs" 
-                    style={{ ...styles, backgroundColor: '#f8f9fa' }}
+                  <Paper
+                    shadow="sm"
+                    p="xs"
+                    style={{ ...styles, backgroundColor: "#f8f9fa" }}
                   >
                     <Group>
                       <Text size="sm" fw={500}>
-                        {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected
+                        {selectedFiles.length} file
+                        {selectedFiles.length !== 1 ? "s" : ""} selected
                       </Text>
                       <Button
                         variant="light"
@@ -166,8 +168,11 @@ const Datasets = () => {
                       <Table.Td>
                         <Checkbox
                           checked={selectedFiles.includes(file.planName)}
-                          onChange={(event) => 
-                            handleSelectFile(file.planName, event.currentTarget.checked)
+                          onChange={(event) =>
+                            handleSelectFile(
+                              file.planName,
+                              event.currentTarget.checked
+                            )
                           }
                           aria-label={`Select ${file.fileName}`}
                         />
@@ -185,7 +190,10 @@ const Datasets = () => {
                             setSelectedFiles([file.planName]);
                             setDeleteModalOpen(true);
                           }}
-                          loading={deleteLoading && selectedFiles.includes(file.planName)}
+                          loading={
+                            deleteLoading &&
+                            selectedFiles.includes(file.planName)
+                          }
                           disabled={deleteLoading}
                         >
                           <IconTrash size={16} />
@@ -213,11 +221,13 @@ const Datasets = () => {
         title={
           <Group gap="xs">
             <IconAlertTriangle size={20} color="red" />
-            <Text size="lg" fw={500}>Confirm Delete</Text>
+            <Text size="lg" fw={500}>
+              Confirm Delete
+            </Text>
           </Group>
         }
       >
-        <Stack spacing="md">
+        <Stack gap={16}>
           <Text>
             {selectedFiles.length > 1
               ? `Are you sure you want to delete these ${selectedFiles.length} files? This action cannot be undone.`
@@ -225,10 +235,14 @@ const Datasets = () => {
           </Text>
           {selectedFiles.length > 1 && (
             <Paper withBorder p="xs" bg="gray.0">
-              <Stack spacing="xs">
-                <Text size="sm" fw={500}>Selected files:</Text>
-                {selectedFiles.map(fileName => (
-                  <Text size="sm" key={fileName}>• {fileName}</Text>
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>
+                  Selected files:
+                </Text>
+                {selectedFiles.map((fileName) => (
+                  <Text size="sm" key={fileName}>
+                    • {fileName}
+                  </Text>
                 ))}
               </Stack>
             </Paper>

@@ -1,14 +1,14 @@
 import React, { useState } from "react";
-import { 
-  Button, 
-  Group, 
+import {
+  Button,
+  Group,
   Tooltip,
   Box,
   Paper,
   Stack,
   Text,
   CloseButton,
-  Transition
+  Transition,
 } from "@mantine/core";
 import { useMutation } from "@apollo/client";
 import { notifications } from "@mantine/notifications";
@@ -18,7 +18,7 @@ import { GET_INVOICE_DATA, GET_UPLOADED_FILES } from "../graphql/queries";
 
 interface UploadStatus {
   fileName: string;
-  status: 'success' | 'error';
+  status: "success" | "error";
   message: string;
 }
 
@@ -28,30 +28,34 @@ const FileUpload = () => {
   const [uploadFile] = useMutation(UPLOAD_FILE, {
     refetchQueries: [
       { query: GET_UPLOADED_FILES },
-      { query: GET_INVOICE_DATA }
+      { query: GET_INVOICE_DATA },
     ],
   });
 
   // Remove a status notification
   const removeStatus = (index: number) => {
-    setUploadStatuses(prev => prev.filter((_, i) => i !== index));
+    setUploadStatuses((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Add a new status notification
   const addStatus = (status: UploadStatus) => {
-    setUploadStatuses(prev => [...prev, status]);
+    setUploadStatuses((prev) => [...prev, status]);
     // Auto-remove after 5 seconds
     setTimeout(() => {
-      setUploadStatuses(prev => prev.filter(s => s.fileName !== status.fileName));
+      setUploadStatuses((prev) =>
+        prev.filter((s) => s.fileName !== status.fileName)
+      );
     }, 5000);
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
     // Reset file input
-    event.target.value = '';
+    event.target.value = "";
 
     for (const file of files) {
       try {
@@ -61,8 +65,8 @@ const FileUpload = () => {
           if (!content) {
             addStatus({
               fileName: file.name,
-              status: 'error',
-              message: 'Failed to read file content'
+              status: "error",
+              message: "Failed to read file content",
             });
             return;
           }
@@ -82,21 +86,21 @@ const FileUpload = () => {
             if (response.data?.uploadFile?.success) {
               addStatus({
                 fileName: file.name,
-                status: 'success',
-                message: 'File uploaded successfully'
+                status: "success",
+                message: "File uploaded successfully",
               });
             } else {
               addStatus({
                 fileName: file.name,
-                status: 'error',
-                message: response.data?.uploadFile?.error || 'Upload failed'
+                status: "error",
+                message: response.data?.uploadFile?.error || "Upload failed",
               });
             }
           } catch (error) {
             addStatus({
               fileName: file.name,
-              status: 'error',
-              message: error instanceof Error ? error.message : 'Upload failed'
+              status: "error",
+              message: error instanceof Error ? error.message : "Upload failed",
             });
           }
         };
@@ -104,8 +108,8 @@ const FileUpload = () => {
         reader.onerror = () => {
           addStatus({
             fileName: file.name,
-            status: 'error',
-            message: 'Failed to read file'
+            status: "error",
+            message: "Failed to read file",
           });
         };
 
@@ -113,8 +117,8 @@ const FileUpload = () => {
       } catch (error) {
         addStatus({
           fileName: file.name,
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Upload failed'
+          status: "error",
+          message: error instanceof Error ? error.message : "Upload failed",
         });
       }
     }
@@ -144,14 +148,14 @@ const FileUpload = () => {
       {/* Floating Notifications Container */}
       <Box
         style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          width: '300px',
+          position: "fixed",
+          top: "20px",
+          right: "20px",
+          width: "300px",
           zIndex: 9999,
         }}
       >
-        <Stack spacing="xs">
+        <Stack>
           {uploadStatuses.map((status, index) => (
             <Transition
               key={`${status.fileName}-${index}`}
@@ -164,13 +168,16 @@ const FileUpload = () => {
                   p="sm"
                   style={{
                     ...styles,
-                    backgroundColor: status.status === 'success' ? '#f0fdf4' : '#fef2f2',
-                    border: `1px solid ${status.status === 'success' ? '#86efac' : '#fecaca'}`,
+                    backgroundColor:
+                      status.status === "success" ? "#f0fdf4" : "#fef2f2",
+                    border: `1px solid ${
+                      status.status === "success" ? "#86efac" : "#fecaca"
+                    }`,
                   }}
                 >
-                  <Group position="apart" align="flex-start">
-                    <Group spacing="xs">
-                      {status.status === 'success' ? (
+                  <Group justify="space-between" align="flex-start">
+                    <Group gap="xs">
+                      {status.status === "success" ? (
                         <IconCheck size={16} color="#22c55e" />
                       ) : (
                         <IconX size={16} color="#ef4444" />
@@ -179,13 +186,16 @@ const FileUpload = () => {
                         <Text size="sm" fw={500}>
                           {status.fileName}
                         </Text>
-                        <Text size="xs" color={status.status === 'success' ? 'green' : 'red'}>
+                        <Text
+                          size="xs"
+                          color={status.status === "success" ? "green" : "red"}
+                        >
                           {status.message}
                         </Text>
                       </Box>
                     </Group>
-                    <CloseButton 
-                      size="sm" 
+                    <CloseButton
+                      size="sm"
                       onClick={() => removeStatus(index)}
                     />
                   </Group>

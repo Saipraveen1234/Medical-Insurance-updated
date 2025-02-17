@@ -1,17 +1,16 @@
-// In App.tsx
-import React from 'react';
-import { AppShell, Box, Stack, Text } from '@mantine/core';
-import { IconDashboard, IconDatabase } from '@tabler/icons-react';
-import InvoiceSummaryDashboard from './components/InvoiceSummaryDashboard';
-import Datasets from './components/Datasets';
-import NavButton from './components/NavButton';
+import React from "react";
+import { AppShell, Box, Stack, Text, Container } from "@mantine/core";
+import { IconDashboard, IconDatabase } from "@tabler/icons-react";
+import InvoiceSummaryDashboard from "./components/InvoiceSummaryDashboard";
+import Datasets from "./components/Datasets";
+import NavButton from "./components/NavButton";
 
 const VIEWS = {
-  DASHBOARD: 'dashboard',
-  DATASETS: 'datasets'
+  DASHBOARD: "dashboard",
+  DATASETS: "datasets",
 } as const;
 
-type ViewType = typeof VIEWS[keyof typeof VIEWS];
+type ViewType = (typeof VIEWS)[keyof typeof VIEWS];
 
 const App = () => {
   const [activeView, setActiveView] = React.useState<ViewType>(VIEWS.DASHBOARD);
@@ -28,16 +27,16 @@ const App = () => {
   };
 
   return (
-    <AppShell
-      navbar={{ width: 250, breakpoint: 'sm' }}
-      padding={0}
-    >
-      <AppShell.Navbar style={{ backgroundColor: '#2A3036', border: 'none' }}>
+    <AppShell navbar={{ width: 250, breakpoint: "sm" }} padding={0}>
+      <AppShell.Navbar style={{ backgroundColor: "#2A3036", border: "none" }}>
         <Box p="md">
-          <Box mb={60}>
-            <img src="/Untitled-5.png" alt="Company Logo" style={{ maxWidth: '100%' }} />
+          <Box mb="3.75rem">
+            <img
+              src="/Untitled-5.png"
+              alt="Company Logo"
+              style={{ maxWidth: "100%" }}
+            />
           </Box>
-
           <Stack gap="md">
             <NavButton
               icon={<IconDashboard size={20} color="white" />}
@@ -56,9 +55,9 @@ const App = () => {
       </AppShell.Navbar>
 
       <AppShell.Main bg="gray.0">
-        <Box p="md">
-          {renderView()}
-        </Box>
+        <Container fluid className="wrapper">
+          <Box p="md">{renderView()}</Box>
+        </Container>
       </AppShell.Main>
     </AppShell>
   );

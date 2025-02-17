@@ -12,6 +12,8 @@ import {
   Pagination,
   SegmentedControl,
   Box,
+  Select,
+  MantineProvider,
 } from "@mantine/core";
 import { gql } from "@apollo/client";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
@@ -43,6 +45,8 @@ interface InvoiceData {
 const InvoiceSummaryDashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [planFilter, setPlanFilter] = useState<"ALL" | "UHC" | "UHG">("ALL");
+  const [selectedMonth, setSelectedMonth] = useState<string>("ALL");
+  const [selectedYear, setSelectedYear] = useState<string>("ALL");
   const itemsPerPage = 10;
 
   const { data, loading, error } = useQuery<{ getInvoiceData: InvoiceData[] }>(
@@ -50,12 +54,36 @@ const InvoiceSummaryDashboard = () => {
     { fetchPolicy: "cache-first" }
   );
 
+  const monthOrder = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ];
+
+  const availableYears = useMemo(() => {
+    if (!data?.getInvoiceData) return [];
+    const years = new Set(
+      data.getInvoiceData.map((item) => item.year.toString())
+    );
+    return Array.from(years).sort((a, b) => parseInt(b) - parseInt(a));
+  }, [data?.getInvoiceData]);
+
   const groupedByMonth = useMemo(() => {
     if (!data?.getInvoiceData) return {};
 
     const filteredData = data.getInvoiceData.filter((item) => {
-      if (planFilter === "ALL") return true;
-      return item.planType.startsWith(planFilter);
+      if (planFilter !== "ALL" && !item.planType.startsWith(planFilter))
+        return false;
+      return true;
     });
 
     return filteredData.reduce(
@@ -80,11 +108,6 @@ const InvoiceSummaryDashboard = () => {
     );
   }, [data, planFilter]);
 
-  const monthOrder = [
-    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
-  ];
-
   const sortedMonths = useMemo(() => {
     return Object.entries(groupedByMonth).sort(([keyA], [keyB]) => {
       const [monthA, yearA] = keyA.split("-");
@@ -94,19 +117,24 @@ const InvoiceSummaryDashboard = () => {
     });
   }, [groupedByMonth]);
 
-  const totalPages = useMemo(
-    () => Math.ceil(sortedMonths.length / itemsPerPage),
-    [sortedMonths, itemsPerPage]
+  const filteredSortedMonths = useMemo(() => {
+    return sortedMonths.filter(([key]) => {
+      const [month, year] = key.split("-");
+      const monthMatch = selectedMonth === "ALL" || month === selectedMonth;
+      const yearMatch = selectedYear === "ALL" || year === selectedYear;
+      return monthMatch && yearMatch;
+    });
+  }, [sortedMonths, selectedMonth, selectedYear]);
+
+  const totalPages = Math.ceil(filteredSortedMonths.length / itemsPerPage);
+  const currentItems = filteredSortedMonths.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
-  const currentItems = useMemo(() => {
-    return sortedMonths.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-  }, [sortedMonths, currentPage, itemsPerPage]);
-
-  const cellStyle = { padding: "8px", textAlign: "center" } as const;
+  // Updated cell styles using rem units
+  const cellStyle = { padding: "0.5rem", textAlign: "center" } as const;
+  const leftAlignCellStyle = { padding: "0.5rem", textAlign: "left" } as const;
 
   const formatAmount = (amount: number) => {
     const formatted = new Intl.NumberFormat("en-US", {
@@ -115,7 +143,12 @@ const InvoiceSummaryDashboard = () => {
     }).format(Math.abs(amount));
 
     return (
-      <Text component="div" fw={500} c={amount < 0 ? "red" : "inherit"}>
+      <Text
+        component="div"
+        fw={500}
+        c={amount < 0 ? "red" : "inherit"}
+        style={{ position: "relative" }}
+      >
         {amount < 0 ? `-${formatted}` : formatted}
       </Text>
     );
@@ -152,13 +185,30 @@ const InvoiceSummaryDashboard = () => {
     const uhcTotals = calculateGroupTotals(monthData.uhcPlans);
     const uhgTotals = calculateGroupTotals(monthData.uhgPlans);
 
-    const headerLabelStyle = { flex: "0 0 20%", textAlign: "left" } as const;
-    const headerValueStyle = { flex: "1", textAlign: "center" } as const;
+    const headerLabelStyle = {
+      flex: "0 0 20%",
+      textAlign: "left",
+      paddingLeft: "2rem", // changed from 32px to 2rem
+      marginRight: "1.5rem", // changed from 24px to 1.5rem
+    } as const;
+    const headerValueStyle = {
+      flex: "1",
+      textAlign: "center",
+      minWidth: "20%",
+    } as const;
 
     return (
       <Table highlightOnHover>
         <Table.Thead>
-          <Table.Tr>
+          <Table.Tr
+            data-with-row-border="true"
+            data-hover="true"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-evenly",
+            }}
+          >
             <Table.Th style={cellStyle}>Plan Type</Table.Th>
             <Table.Th style={cellStyle}>Previous Months Adjustments</Table.Th>
             <Table.Th style={cellStyle}>Current Month Amount</Table.Th>
@@ -174,7 +224,10 @@ const InvoiceSummaryDashboard = () => {
                     <Accordion.Control
                       aria-label={`Toggle UHC details for ${monthKey}`}
                     >
-                      <Group style={{ width: "100%" }} wrap="wrap">
+                      <Group
+                        style={{ width: "100%", paddingLeft: "3.5rem" }} // changed from 57px to 3.5rem
+                        wrap="wrap"
+                      >
                         <Text component="div" fw={700} style={headerLabelStyle}>
                           UHC
                         </Text>
@@ -228,7 +281,10 @@ const InvoiceSummaryDashboard = () => {
                     <Accordion.Control
                       aria-label={`Toggle UHG details for ${monthKey}`}
                     >
-                      <Group style={{ width: "100%" }} wrap="wrap">
+                      <Group
+                        style={{ width: "100%", paddingLeft: "3.5rem" }} // changed from 57px to 3.5rem
+                        wrap="wrap"
+                      >
                         <Text component="div" fw={700} style={headerLabelStyle}>
                           UHG
                         </Text>
@@ -286,7 +342,7 @@ const InvoiceSummaryDashboard = () => {
   };
 
   const overallTotals = useMemo(() => {
-    return sortedMonths.reduce(
+    return filteredSortedMonths.reduce(
       (acc, [_, monthData]) => {
         const totals = calculateGroupTotals([
           ...monthData.uhcPlans,
@@ -296,7 +352,7 @@ const InvoiceSummaryDashboard = () => {
       },
       { grandTotal: 0 }
     );
-  }, [sortedMonths]);
+  }, [filteredSortedMonths]);
 
   const renderTotalSection = (total: number) => (
     <Box mt="xl">
@@ -304,21 +360,21 @@ const InvoiceSummaryDashboard = () => {
         p="lg"
         radius="md"
         style={{
-          background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
-          border: 'none',
-          transition: 'transform 0.2s ease',
-          cursor: 'default',
+          background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
+          border: "none",
+          transition: "transform 0.2s ease",
+          cursor: "default",
         }}
         className="total-section"
       >
-        <Group position="apart" py="md">
-          <Stack spacing={2}>
+        <Group justify="space-between" py="md">
+          <Stack gap={2}>
             <Text
               size="xl"
-              weight={700}
+              fw={700}
               style={{
-                color: 'rgba(255, 255, 255, 0.9)',
-                letterSpacing: '0.5px'
+                color: "rgba(255, 255, 255, 0.9)",
+                letterSpacing: "0.5px",
               }}
             >
               Overall Invoice Total
@@ -326,30 +382,34 @@ const InvoiceSummaryDashboard = () => {
             <Text
               size="sm"
               style={{
-                color: 'rgba(255, 255, 255, 0.7)'
+                color: "rgba(255, 255, 255, 0.7)",
               }}
             >
-              All months combined
+              {selectedMonth !== "ALL" && `${selectedMonth} `}
+              {selectedYear !== "ALL" && `${selectedYear} `}
+              {selectedMonth === "ALL" && selectedYear === "ALL" && "All Time "}
+              Totals
             </Text>
           </Stack>
           <Box
             style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              padding: '16px 24px',
-              borderRadius: '12px',
-              backdropFilter: 'blur(8px)',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              background: "rgba(255, 255, 255, 0.1)",
+              padding: "1rem 1.5rem",
+              borderRadius: "0.75rem",
+              backdropFilter: "blur(8px)",
+              boxShadow: "0 0.25rem 0.375rem rgba(0, 0, 0, 0.1)",
             }}
           >
             <Text
               size="28px"
-              weight={700}
+              fw={700}
               style={{
-                color: 'white',
-                fontFamily: 'monospace',
-                letterSpacing: '0.5px',
-                textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                color: "white",
+                fontFamily: "monospace",
+                letterSpacing: "0.5px",
+                textShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
               }}
+              component="div"
             >
               {formatAmount(total)}
             </Text>
@@ -369,7 +429,8 @@ const InvoiceSummaryDashboard = () => {
     content = (
       <Card shadow="sm" p="lg" radius="md">
         <Text component="div" c="dimmed">
-          No invoice data available. Please upload files through the Datasets tab.
+          No invoice data available. Please upload files through the Datasets
+          tab.
         </Text>
       </Card>
     );
@@ -380,79 +441,118 @@ const InvoiceSummaryDashboard = () => {
           <Text component="h2" className="filter-title">
             Insurance Invoice Summary
           </Text>
-          <SegmentedControl
-            value={planFilter}
-            onChange={(value: string) => {
-              setPlanFilter(value as "ALL" | "UHC" | "UHG");
-              setCurrentPage(1);
-            }}
-            data={[
-              { label: "All Plans", value: "ALL" },
-              { label: "UHC Only", value: "UHC" },
-              { label: "UHG Only", value: "UHG" },
-            ]}
-            aria-label="Filter plans"
-            styles={{
-              root: { minWidth: 400 },
-              label: { fontSize: "1rem" },
-              indicator: {
-                backgroundColor: "#228be6",
-                height: "38px",
-                borderRadius: "8px",
-              },
-            }}
-          />
+          <Group gap="md" align="flex-end">
+            <SegmentedControl
+              value={planFilter}
+              onChange={(value: string) => {
+                setPlanFilter(value as "ALL" | "UHC" | "UHG");
+                setCurrentPage(1);
+              }}
+              data={[
+                { label: "All Plans", value: "ALL" },
+                { label: "UHC Only", value: "UHC" },
+                { label: "UHG Only", value: "UHG" },
+              ]}
+              aria-label="Filter plans"
+            />
+            <Select
+              label="Month"
+              data={[
+                { value: "ALL", label: "All Months" },
+                ...monthOrder.map((month) => ({ value: month, label: month })),
+              ]}
+              value={selectedMonth}
+              onChange={(value) => {
+                setSelectedMonth(value || "ALL");
+                setCurrentPage(1);
+              }}
+              placeholder="Select month"
+              clearable={false}
+            />
+            <Select
+              label="Year"
+              data={[
+                { value: "ALL", label: "All Years" },
+                ...availableYears.map((year) => ({ value: year, label: year })),
+              ]}
+              value={selectedYear}
+              onChange={(value) => {
+                setSelectedYear(value || "ALL");
+                setCurrentPage(1);
+              }}
+              placeholder="Select year"
+              clearable={false}
+            />
+          </Group>
         </div>
 
-        <Accordion variant="contained" multiple>
-          {currentItems.map(([monthKey, monthData]) => (
-            <Accordion.Item key={monthKey} value={monthKey}>
-              <Accordion.Control aria-label={`Toggle ${monthKey} details`}>
-                <Group justify="space-between" wrap="nowrap">
-                  <Text component="div" fw={700} size="lg">
-                    {monthData.month} {monthData.year}
-                  </Text>
-                  <Text component="div" fw={700} c="blue">
-                    {formatAmount(
-                      calculateGroupTotals([
-                        ...monthData.uhcPlans,
-                        ...monthData.uhgPlans,
-                      ]).grandTotal
-                    )}
-                  </Text>
-                </Group>
-              </Accordion.Control>
-              <Accordion.Panel>
-                {renderMonthData(monthKey, monthData)}
-              </Accordion.Panel>
-            </Accordion.Item>
-          ))}
-        </Accordion>
+        {currentItems.length === 0 ? (
+          <Card shadow="sm" p="lg" radius="md">
+            <Text component="div" c="dimmed">
+              No invoice data available for the selected filters.
+            </Text>
+          </Card>
+        ) : (
+          <>
+            <Accordion variant="contained" multiple>
+              {currentItems.map(([monthKey, monthData]) => (
+                <Accordion.Item key={monthKey} value={monthKey}>
+                  <Accordion.Control aria-label={`Toggle ${monthKey} details`}>
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text component="div" fw={700} size="lg">
+                        {monthData.month} {monthData.year}
+                      </Text>
+                      <Text component="div" fw={700} c="blue">
+                        {formatAmount(
+                          calculateGroupTotals([
+                            ...monthData.uhcPlans,
+                            ...monthData.uhgPlans,
+                          ]).grandTotal
+                        )}
+                      </Text>
+                    </Group>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    {renderMonthData(monthKey, monthData)}
+                  </Accordion.Panel>
+                </Accordion.Item>
+              ))}
+            </Accordion>
 
-        {/* Enhanced Total Section */}
-        {renderTotalSection(overallTotals.grandTotal)}
+            {renderTotalSection(overallTotals.grandTotal)}
 
-        {totalPages > 1 && (
-          <Pagination
-            total={totalPages}
-            value={currentPage}
-            onChange={setCurrentPage}
-            color="blue"
-            size="lg"
-            mt="xl"
-            aria-label="Invoice pagination"
-          />
+            {totalPages > 1 && (
+              <Pagination
+                total={totalPages}
+                value={currentPage}
+                onChange={setCurrentPage}
+                color="blue"
+                size="lg"
+                mt="xl"
+                aria-label="Invoice pagination"
+              />
+            )}
+          </>
         )}
       </Stack>
     );
   }
 
   return (
-    <Container size="xl">
-      <Card shadow="sm" p="lg" radius="md">
-        {content}
-      </Card>
-    </Container>
+    <MantineProvider
+      theme={{ colorScheme: "dark" }}
+      withGlobalStyles
+      withNormalizeCSS
+    >
+      {/* Make sure your index.html includes a meta viewport tag:
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+      */}
+      <Container fluid>
+        <Card shadow="sm" p="lg" radius="md">
+          {content}
+        </Card>
+      </Container>
+    </MantineProvider>
   );
 };
 
