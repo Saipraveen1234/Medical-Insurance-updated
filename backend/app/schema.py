@@ -11,6 +11,9 @@ class InvoiceSummary:
     year: int
     currentMonthTotal: float
     previousMonthsTotal: float
+    fiscal2024Total: float
+    fiscal2025Total: float
+    allPreviousAdjustments: float
     grandTotal: float
 
 @strawberry.type
@@ -44,6 +47,9 @@ class Query:
                 year=item['year'],
                 currentMonthTotal=item['currentMonthTotal'],
                 previousMonthsTotal=item['previousMonthsTotal'],
+                fiscal2024Total=item['fiscal2024Total'],
+                fiscal2025Total=item['fiscal2025Total'],
+                allPreviousAdjustments=item['allPreviousAdjustments'],
                 grandTotal=item['grandTotal']
             )
             for item in data

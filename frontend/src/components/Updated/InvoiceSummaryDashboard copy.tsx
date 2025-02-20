@@ -15,9 +15,9 @@ import {
   MultiSelect,
   Select,
   MantineProvider,
-  SimpleGrid,
 } from "@mantine/core";
-import { IconCalendar } from "@tabler/icons-react";
+import { IconCalendar } from '@tabler/icons-react';
+import { SimpleGrid } from '@mantine/core';
 import { gql } from "@apollo/client";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import "./InvoiceSummaryDashboard.css";
@@ -31,9 +31,6 @@ const GET_INVOICE_DATA = gql`
       year
       currentMonthTotal
       previousMonthsTotal
-      fiscal2024Total
-      fiscal2025Total
-      allPreviousAdjustments
       grandTotal
     }
   }
@@ -45,8 +42,8 @@ interface InvoiceData {
   year: number;
   currentMonthTotal: number;
   previousMonthsTotal: number;
-  allPreviousAdjustments: number;
   grandTotal: number;
+  coverage_dates: string;  // Add this field
 }
 
 const monthOrder = [
@@ -64,10 +61,67 @@ const monthOrder = [
   "DEC",
 ];
 
+/**
+ * Check if a given item belongs to the specified fiscal year.
+ * Fiscal year N = [Oct (N-1) .. Sep (N)].
+ *
+ * Example: isInFiscalYear(item, 2024)
+ *  => item is from Oct 2023..Sep 2024
+ */
+function isInFiscalYear(item: InvoiceData, fiscalYear: number): boolean {
+  const mIndex = monthOrder.indexOf(item.month);
+
+  // For October's previous month adjustments, they belong to the previous fiscal year
+  if (item.month === "OCT" && item.previousMonthsTotal !== 0) {
+    return item.year === fiscalYear;  // October's adjustments go to the same calendar year's fiscal year
+  }
+
+  // Normal fiscal year logic
+  if (item.year === fiscalYear - 1 && mIndex >= 9) {
+    return true;  // Oct-Dec of previous year
+  }
+  if (item.year === fiscalYear && mIndex <= 8) {
+    return true;  // Jan-Sep of current year
+  }
+  return false;
+}
+
+/**
+ * Compute all possible "fiscal years" from the dataset.
+ * For example, if data covers from 2023 to 2025, we might have
+ * 2023 (which includes Oct 2022..Sep 2023),
+ * 2024 (Oct 2023..Sep 2024),
+ * 2025 (Oct 2024..Sep 2025), etc.
+ *
+ * This is optional; you can hardcode [2024,2025] if that's all you need.
+ */
+function getAllFiscalYears(data: InvoiceData[]): number[] {
+  if (!data.length) return [];
+  // Find min & max original year
+  let minYear = Infinity;
+  let maxYear = -Infinity;
+  for (const item of data) {
+    if (item.year < minYear) minYear = item.year;
+    if (item.year > maxYear) maxYear = item.year;
+  }
+  // Because Oct of minYear-1 might be relevant,
+  // we'll just guess you want fiscal years up to maxYear+1
+  // Adjust as needed
+  const result: number[] = [];
+  for (let y = minYear; y <= maxYear + 1; y++) {
+    result.push(y);
+  }
+  return result;
+}
+
 const InvoiceSummaryDashboard = () => {
+  // State
   const [currentPage, setCurrentPage] = useState(1);
   const [planFilter, setPlanFilter] = useState<"ALL" | "UHC" | "UHG">("ALL");
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+
+  // This is the "fiscal year" the user picks from the dropdown
+  // (not the original calendar year).
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<string>("ALL");
 
   const itemsPerPage = 10;
@@ -77,43 +131,40 @@ const InvoiceSummaryDashboard = () => {
     { fetchPolicy: "cache-first" }
   );
 
+  // 1) Build an array of all possible fiscal years from the data
   const allFiscalYears = useMemo(() => {
     if (!data?.getInvoiceData) return [];
-    let yearsSet = new Set<number>();
-    for (const item of data.getInvoiceData) {
-      const idx = monthOrder.indexOf(item.month);
-      if (idx >= 9) {
-        yearsSet.add(item.year);
-        yearsSet.add(item.year + 1);
-      } else {
-        yearsSet.add(item.year);
-      }
-    }
-    return Array.from(yearsSet).sort((a, b) => b - a);
+    return getAllFiscalYears(data.getInvoiceData).sort((a, b) => b - a);
   }, [data?.getInvoiceData]);
 
+  // 2) Filter logic:
+  //    - If user picks "ALL," we keep all items
+  //    - Else we keep items that are in the chosen fiscal year
+  //    - Also filter by plan & months
   const filteredData = useMemo(() => {
     if (!data?.getInvoiceData) return [];
+
     return data.getInvoiceData.filter((item) => {
-      if (planFilter !== "ALL" && !item.planType.startsWith(planFilter)) {
-        return false;
-      }
-      if (selectedMonths.length > 0 && !selectedMonths.includes(item.month)) {
-        return false;
-      }
+      // a) Check if item is in the selected fiscal year
+      let inYear = true;
       if (selectedFiscalYear !== "ALL") {
         const fy = parseInt(selectedFiscalYear, 10);
-        const idx = monthOrder.indexOf(item.month);
-        if (idx >= 9) {
-          return item.year === fy - 1;
-        } else {
-          return item.year === fy;
-        }
+        inYear = isInFiscalYear(item, fy);
       }
-      return true;
-    });
-  }, [data, planFilter, selectedMonths, selectedFiscalYear]);
 
+      // b) Check plan filter
+      let inPlan = planFilter === "ALL" || item.planType.startsWith(planFilter);
+
+      // c) Check month filter
+      let inMonths =
+        selectedMonths.length === 0 || selectedMonths.includes(item.month);
+
+      return inYear && inPlan && inMonths;
+    });
+  }, [data, selectedFiscalYear, planFilter, selectedMonths]);
+
+  // 3) Group by original "month-year" so the Accordion name remains the same
+  //    e.g. "OCT 2023"
   const groupedByMonthYear = useMemo(() => {
     const acc: Record<
       string,
@@ -125,9 +176,10 @@ const InvoiceSummaryDashboard = () => {
       }
     > = {};
     for (const item of filteredData) {
-      const key = `${item.month}-${item.year}`;
-      if (!acc[key]) {
-        acc[key] = {
+      // We'll use the literal "month-year" from the original data
+      const groupKey = `${item.month}-${item.year}`;
+      if (!acc[groupKey]) {
+        acc[groupKey] = {
           month: item.month,
           year: item.year,
           uhcPlans: [],
@@ -135,67 +187,58 @@ const InvoiceSummaryDashboard = () => {
         };
       }
       if (item.planType.startsWith("UHC")) {
-        acc[key].uhcPlans.push(item);
+        acc[groupKey].uhcPlans.push(item);
       } else {
-        acc[key].uhgPlans.push(item);
+        acc[groupKey].uhgPlans.push(item);
       }
     }
     return acc;
   }, [filteredData]);
 
+  // 4) Sort descending by the original year, then by month index
+  //    (So you'll see DEC 2024, NOV 2024, OCT 2024, SEP 2024, etc.)
   const sortedMonths = useMemo(() => {
     return Object.entries(groupedByMonthYear).sort(([keyA], [keyB]) => {
-      const [mA, yA] = keyA.split("-");
-      const [mB, yB] = keyB.split("-");
-      const yearA = parseInt(yA, 10);
-      const yearB = parseInt(yB, 10);
-      if (yearA !== yearB) return yearB - yearA;
-      return monthOrder.indexOf(mB) - monthOrder.indexOf(mA);
+      const [monthA, yearA] = keyA.split("-");
+      const [monthB, yearB] = keyB.split("-");
+      if (yearA !== yearB) {
+        return parseInt(yearB) - parseInt(yearA);
+      }
+      return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
     });
   }, [groupedByMonthYear]);
 
+  // 5) Pagination
   const totalPages = Math.ceil(sortedMonths.length / itemsPerPage);
-  const currentItems = useMemo(() => {
-    return sortedMonths.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-  }, [sortedMonths, currentPage, itemsPerPage]);
+  const currentItems = sortedMonths.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
-  const { total2024, total2025 } = useMemo(() => {
-    if (!data?.getInvoiceData) return { total2024: 0, total2025: 0 };
-    
-    return data.getInvoiceData.reduce(
-      (acc, item) => ({
-        total2024: acc.total2024 + item.fiscal2024Total,
-        total2025: acc.total2025 + item.fiscal2025Total,
-      }),
-      { total2024: 0, total2025: 0 }
-    );
-  }, [data]);
-
-  const overallTotal = total2024 + total2025;
-
-  const calculateGroupTotals = (plans: InvoiceData[]) => {
+  // Summation
+  function calculateGroupTotals(plans: InvoiceData[]) {
     return plans.reduce(
       (acc, curr) => ({
         previousMonthsTotal: acc.previousMonthsTotal + curr.previousMonthsTotal,
         currentMonthTotal: acc.currentMonthTotal + curr.currentMonthTotal,
-        allPreviousAdjustments: acc.allPreviousAdjustments + curr.allPreviousAdjustments,
         grandTotal: acc.grandTotal + curr.grandTotal,
       }),
-      { previousMonthsTotal: 0, currentMonthTotal: 0, allPreviousAdjustments: 0, grandTotal: 0 }
+      { previousMonthsTotal: 0, currentMonthTotal: 0, grandTotal: 0 }
     );
-  };
+  }
 
   const formatAmount = (amount: number) => {
-    const val = Math.abs(amount);
     const formatted = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(val);
+    }).format(Math.abs(amount));
     return (
-      <Text fw={500} c={amount < 0 ? "red" : "inherit"}>
+      <Text
+        component="div"
+        fw={500}
+        c={amount < 0 ? "red" : "inherit"}
+        style={{ position: "relative" }}
+      >
         {amount < 0 ? `-${formatted}` : formatted}
       </Text>
     );
@@ -211,22 +254,44 @@ const InvoiceSummaryDashboard = () => {
   };
 
   const formatPlanType = (planType: string) => {
-    if (planType.startsWith("UHG-")) return planType.split("-")[1];
+    if (planType.startsWith("UHG-")) {
+      return planType.split("-")[1];
+    }
     return planType.replace(/([A-Z])(\d)/g, "$1 $2");
   };
 
+  // 6) Render the data for a single month-year group
   const renderMonthData = (monthKey: string, group: any) => {
     const uhcTotals = calculateGroupTotals(group.uhcPlans);
     const uhgTotals = calculateGroupTotals(group.uhgPlans);
-    
+
+    const cellStyle = { padding: "0.5rem", textAlign: "center" } as const;
+    const headerLabelStyle = {
+      flex: "0 0 20%",
+      textAlign: "left",
+      paddingLeft: "2rem",
+      marginRight: "1.5rem",
+    } as const;
+    const headerValueStyle = {
+      flex: "1",
+      textAlign: "center",
+      minWidth: "20%",
+    } as const;
+
     return (
       <Table highlightOnHover>
         <Table.Thead>
-          <Table.Tr style={{ display: "flex", justifyContent: "space-evenly" }}>
-            <Table.Th>Plan Type</Table.Th>
-            <Table.Th>Previous Months Adjustments</Table.Th>
-            <Table.Th>Current Month Amount</Table.Th>
-            <Table.Th>Total</Table.Th>
+          <Table.Tr
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-evenly",
+            }}
+          >
+            <Table.Th style={cellStyle}>Plan Type</Table.Th>
+            <Table.Th style={cellStyle}>Previous Months Adjustments</Table.Th>
+            <Table.Th style={cellStyle}>Current Month Amount</Table.Th>
+            <Table.Th style={cellStyle}>Total</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -235,41 +300,36 @@ const InvoiceSummaryDashboard = () => {
               <Accordion variant="contained" multiple>
                 {group.uhcPlans.length > 0 && (
                   <Accordion.Item value={`${monthKey}-uhc`}>
-                    <Accordion.Control>
+                    <Accordion.Control
+                      aria-label={`Toggle UHC details for ${monthKey}`}
+                    >
                       <Group
                         style={{ width: "100%", paddingLeft: "3.5rem" }}
                         wrap="wrap"
                       >
-                        <Text
-                          fw={700}
-                          style={{
-                            flex: "0 0 20%",
-                            textAlign: "left",
-                            marginRight: "1.5rem",
-                          }}
-                        >
+                        <Text component="div" fw={700} style={headerLabelStyle}>
                           UHC
                         </Text>
-                        <div style={{ flex: 1, textAlign: "center" }}>
-                          {formatAmount(uhcTotals.allPreviousAdjustments)}
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhcTotals.previousMonthsTotal)}
                         </div>
-                        <div style={{ flex: 1, textAlign: "center" }}>
+                        <div style={headerValueStyle}>
                           {formatAmount(uhcTotals.currentMonthTotal)}
                         </div>
-                        <div style={{ flex: 1, textAlign: "center" }}>
-                          {formatAmount(uhcTotals.currentMonthTotal + uhcTotals.allPreviousAdjustments)}
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhcTotals.grandTotal)}
                         </div>
                       </Group>
                     </Accordion.Control>
                     <Accordion.Panel>
-                      <Table>
+                      <Table className="invoice-summary-table">
                         <Table.Tbody>
                           {group.uhcPlans.map(
                             (plan: InvoiceData, idx: number) => (
                               <Table.Tr
                                 key={`${monthKey}-uhc-${plan.planType}-${idx}`}
                               >
-                                <Table.Td>
+                                <Table.Td style={cellStyle}>
                                   <Badge
                                     color={getPlanBadgeColor(plan.planType)}
                                     variant="light"
@@ -278,14 +338,14 @@ const InvoiceSummaryDashboard = () => {
                                     {formatPlanType(plan.planType)}
                                   </Badge>
                                 </Table.Td>
-                                <Table.Td>
-                                  {formatAmount(plan.allPreviousAdjustments)}
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.previousMonthsTotal)}
                                 </Table.Td>
-                                <Table.Td>
+                                <Table.Td style={cellStyle}>
                                   {formatAmount(plan.currentMonthTotal)}
                                 </Table.Td>
-                                <Table.Td>
-                                  {formatAmount(plan.currentMonthTotal + plan.allPreviousAdjustments)}
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.grandTotal)}
                                 </Table.Td>
                               </Table.Tr>
                             )
@@ -295,43 +355,39 @@ const InvoiceSummaryDashboard = () => {
                     </Accordion.Panel>
                   </Accordion.Item>
                 )}
+
                 {group.uhgPlans.length > 0 && (
                   <Accordion.Item value={`${monthKey}-uhg`}>
-                    <Accordion.Control>
+                    <Accordion.Control
+                      aria-label={`Toggle UHG details for ${monthKey}`}
+                    >
                       <Group
                         style={{ width: "100%", paddingLeft: "3.5rem" }}
                         wrap="wrap"
                       >
-                        <Text
-                          fw={700}
-                          style={{
-                            flex: "0 0 20%",
-                            textAlign: "left",
-                            marginRight: "1.5rem",
-                          }}
-                        >
+                        <Text component="div" fw={700} style={headerLabelStyle}>
                           UHG
                         </Text>
-                        <div style={{ flex: 1, textAlign: "center" }}>
-                          {formatAmount(uhgTotals.allPreviousAdjustments)}
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhgTotals.previousMonthsTotal)}
                         </div>
-                        <div style={{ flex: 1, textAlign: "center" }}>
+                        <div style={headerValueStyle}>
                           {formatAmount(uhgTotals.currentMonthTotal)}
                         </div>
-                        <div style={{ flex: 1, textAlign: "center" }}>
-                          {formatAmount(uhgTotals.currentMonthTotal + uhgTotals.allPreviousAdjustments)}
+                        <div style={headerValueStyle}>
+                          {formatAmount(uhgTotals.grandTotal)}
                         </div>
                       </Group>
                     </Accordion.Control>
                     <Accordion.Panel>
-                      <Table>
+                      <Table className="invoice-summary-table">
                         <Table.Tbody>
                           {group.uhgPlans.map(
                             (plan: InvoiceData, idx: number) => (
                               <Table.Tr
                                 key={`${monthKey}-uhg-${plan.planType}-${idx}`}
                               >
-                                <Table.Td>
+                                <Table.Td style={cellStyle}>
                                   <Badge
                                     color={getPlanBadgeColor(plan.planType)}
                                     variant="light"
@@ -340,14 +396,14 @@ const InvoiceSummaryDashboard = () => {
                                     {formatPlanType(plan.planType)}
                                   </Badge>
                                 </Table.Td>
-                                <Table.Td>
-                                  {formatAmount(plan.allPreviousAdjustments)}
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.previousMonthsTotal)}
                                 </Table.Td>
-                                <Table.Td>
+                                <Table.Td style={cellStyle}>
                                   {formatAmount(plan.currentMonthTotal)}
                                 </Table.Td>
-                                <Table.Td>
-                                  {formatAmount(plan.currentMonthTotal + plan.allPreviousAdjustments)}
+                                <Table.Td style={cellStyle}>
+                                  {formatAmount(plan.grandTotal)}
                                 </Table.Td>
                               </Table.Tr>
                             )
@@ -365,6 +421,59 @@ const InvoiceSummaryDashboard = () => {
     );
   };
 
+  // 7) For the top boxes labeled "2024, 2025, TOTAL", we can do a sum of the entire dataset
+  //    by each fiscal year. If you only need 2024 & 2025, you can just compute those two.
+  //    Otherwise, you can do it more dynamically.
+  //    Example: sum everything that isInFiscalYear(item, 2024) => total2024
+// Replace the existing fiscal year calculation with this:
+// Function to determine fiscal year based on coverage dates
+const getFiscalYear = (coverageDates: string, invoiceYear: number): number => {
+  // Parse coverage date
+  if (coverageDates) {
+    const startDate = coverageDates.split('-')[0].trim();
+    const [month, _, year] = startDate.split('/').map(x => parseInt(x));
+    
+    // Check if coverage year matches invoice year
+    if (!isNaN(year) && !isNaN(month) && year === invoiceYear) {
+      // If month is before October, goes to previous fiscal year
+      if (month < 10) {
+        return invoiceYear;
+      }
+      // If month is October or later, goes to next fiscal year
+      return invoiceYear + 1;
+    }
+  }
+  
+  // Default to invoice year if we can't determine
+  return invoiceYear;
+};
+
+// Calculate fiscal year totals
+const fiscalYearTotals = useMemo(() => {
+  const totals = {
+    2024: 0,
+    2025: 0
+  };
+  
+  if (data?.getInvoiceData) {
+    for (const item of data.getInvoiceData) {
+      // Get fiscal year based on coverage dates and invoice year
+      const fiscalYear = getFiscalYear(item.coverage_dates, item.year);
+      
+      // Add both current charges and adjustments to the determined fiscal year
+      totals[fiscalYear] = (totals[fiscalYear] || 0) + item.currentMonthTotal + item.previousMonthsTotal;
+    }
+  }
+  
+  return totals;
+}, [data]);
+
+// Calculate totals for easy reference
+const total2024 = fiscalYearTotals[2024] || 0;
+const total2025 = fiscalYearTotals[2025] || 0;
+const overallTotal = total2024 + total2025;
+
+  // 8) Summation of the *currently displayed page* items
   const overallFilteredTotal = useMemo(() => {
     return currentItems.reduce((acc, [_, group]) => {
       const totals = calculateGroupTotals([
@@ -375,6 +484,7 @@ const InvoiceSummaryDashboard = () => {
     }, 0);
   }, [currentItems]);
 
+  // Final content
   let content;
   if (loading) {
     content = <LoadingSpinner />;
@@ -384,109 +494,129 @@ const InvoiceSummaryDashboard = () => {
   } else if (!data?.getInvoiceData.length) {
     content = (
       <Card shadow="sm" p="lg" radius="md">
-        <Text c="dimmed">No invoice data available. Please upload files.</Text>
+        <Text component="div" c="dimmed">
+          No invoice data available. Please upload files through the Datasets
+          tab.
+        </Text>
       </Card>
     );
   } else {
     content = (
       <Stack>
-        <SimpleGrid cols={3} mb="xl">
-          <Card
-            shadow="sm"
-            p="xl"
-            radius="md"
-            style={{
-              background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
-              border: "none",
-            }}
-          >
-            <Stack gap="xs">
-              <Group align="center" gap="xs">
-                <IconCalendar size={24} color="white" />
-                <Text size="xl" fw={500} c="white">
-                  Fiscal Year 2024
-                </Text>
-              </Group>
-              <Text size="sm" c="gray.3">
-                OCT 2023 - SEP 2024
-              </Text>
-              <Text
-                size="28px"
-                fw={700}
-                c="white"
-                mt="md"
-                style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}
-              >
-                {formatAmount(total2024)}
-              </Text>
-            </Stack>
-          </Card>
-          <Card
-            shadow="sm"
-            p="xl"
-            radius="md"
-            style={{
-              background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
-              border: "none",
-            }}
-          >
-            <Stack gap="xs">
-              <Group align="center" gap="xs">
-                <IconCalendar size={24} color="white" />
-                <Text size="xl" fw={500} c="white">
-                  Fiscal Year 2025
-                </Text>
-              </Group>
-              <Text size="sm" c="gray.3">
-                OCT 2024 - SEP 2025
-              </Text>
-              <Text
-                size="28px"
-                fw={700}
-                c="white"
-                mt="md"
-                style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}
-              >
-                {formatAmount(total2025)}
-              </Text>
-            </Stack>
-          </Card>
-          <Card
-            shadow="sm"
-            p="xl"
-            radius="md"
-            style={{
-              background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
-              border: "none",
-            }}
-          >
-            <Stack gap="xs">
-              <Group align="center" gap="xs">
-                <IconCalendar size={24} color="white" />
-                <Text size="xl" fw={500} c="white">
-                  Combined Total
-                </Text>
-              </Group>
-              <Text size="sm" c="gray.3">
-                All Fiscal Years
-              </Text>
-              <Text
-                size="28px"
-                fw={700}
-                c="white"
-                mt="md"
-                style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}
-              >
-                {formatAmount(overallTotal)}
-              </Text>
-            </Stack>
-          </Card>
-        </SimpleGrid>
+{/* Fiscal Year Summary Cards */}
+<SimpleGrid cols={3} mb="xl">
+  {/* FY2024 Card */}
+  <Card 
+    shadow="sm" 
+    p="xl" 
+    radius="md"
+    style={{
+      background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+      border: 'none'
+    }}
+  >
+    <Stack gap="xs">
+      <Group align="center" gap="xs">
+        <IconCalendar size={24} color="white" />
+        <Text size="xl" fw={500} c="white">
+          Fiscal Year 2024
+        </Text>
+      </Group>
+      <Text size="sm" c="gray.3">
+        OCT 2023 - SEP 2024
+      </Text>
+      <Text 
+        size="28px" 
+        fw={700} 
+        c="white"
+        mt="md"
+        style={{
+          fontFamily: 'monospace',
+          letterSpacing: '0.5px'
+        }}
+      >
+        {formatAmount(total2024)}
+      </Text>
+    </Stack>
+  </Card>
+
+  {/* FY2025 Card */}
+  <Card 
+    shadow="sm" 
+    p="xl" 
+    radius="md"
+    style={{
+      background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+      border: 'none'
+    }}
+  >
+    <Stack gap="xs">
+      <Group align="center" gap="xs">
+        <IconCalendar size={24} color="white" />
+        <Text size="xl" fw={500} c="white">
+          Fiscal Year 2025
+        </Text>
+      </Group>
+      <Text size="sm" c="gray.3">
+        OCT 2024 - SEP 2025
+      </Text>
+      <Text 
+        size="28px" 
+        fw={700} 
+        c="white"
+        mt="md"
+        style={{
+          fontFamily: 'monospace',
+          letterSpacing: '0.5px'
+        }}
+      >
+        {formatAmount(total2025)}
+      </Text>
+    </Stack>
+  </Card>
+
+  {/* Combined Total Card */}
+  <Card 
+    shadow="sm" 
+    p="xl" 
+    radius="md"
+    style={{
+      background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+      border: 'none'
+    }}
+  >
+    <Stack gap="xs">
+      <Group align="center" gap="xs">
+        <IconCalendar size={24} color="white" />
+        <Text size="xl" fw={500} c="white">
+          Combined Total
+        </Text>
+      </Group>
+      <Text size="sm" c="gray.3">
+        All Fiscal Years
+      </Text>
+      <Text 
+        size="28px" 
+        fw={700} 
+        c="white"
+        mt="md"
+        style={{
+          fontFamily: 'monospace',
+          letterSpacing: '0.5px'
+        }}
+      >
+        {formatAmount(overallTotal)}
+      </Text>
+    </Stack>
+  </Card>
+</SimpleGrid>
+    
+        {/* FILTERS */}
         <div
           className="filter-container"
           style={{ display: "flex", justifyContent: "flex-start" }}
         >
-          <Group spacing="md" align="flex-end">
+          <Group gap="md" align="flex-end">
             <SegmentedControl
               value={planFilter}
               onChange={(value: string) => {
@@ -498,7 +628,9 @@ const InvoiceSummaryDashboard = () => {
                 { label: "UHC Only", value: "UHC" },
                 { label: "UHG Only", value: "UHG" },
               ]}
+              aria-label="Filter plans"
             />
+    
             <MultiSelect
               label="Month(s)"
               data={monthOrder.map((m) => ({ value: m, label: m }))}
@@ -509,7 +641,9 @@ const InvoiceSummaryDashboard = () => {
                 setCurrentPage(1);
               }}
               clearable
+              nothingFound="No months found"
             />
+    
             <Select
               label="Year (Fiscal)"
               data={[
@@ -529,9 +663,11 @@ const InvoiceSummaryDashboard = () => {
             />
           </Group>
         </div>
+    
+        {/* ACCORDION */}
         {currentItems.length === 0 ? (
           <Card shadow="sm" p="lg" radius="md">
-            <Text c="dimmed">
+            <Text component="div" c="dimmed">
               No invoice data available for the selected filters.
             </Text>
           </Card>
@@ -540,12 +676,12 @@ const InvoiceSummaryDashboard = () => {
             <Accordion variant="contained" multiple>
               {currentItems.map(([key, group]) => (
                 <Accordion.Item key={key} value={key}>
-                  <Accordion.Control>
+                  <Accordion.Control aria-label={`Toggle ${key} details`}>
                     <Group justify="space-between" wrap="nowrap">
-                      <Text fw={700} size="lg">
+                      <Text component="div" fw={700} size="lg">
                         {group.month} {group.year}
                       </Text>
-                      <Text fw={700} c="blue">
+                      <Text component="div" fw={700} c="blue">
                         {formatAmount(
                           calculateGroupTotals([
                             ...group.uhcPlans,
@@ -561,20 +697,21 @@ const InvoiceSummaryDashboard = () => {
                 </Accordion.Item>
               ))}
             </Accordion>
+    
+            {/* OVERALL FILTERED TOTAL */}
             <Box mt="xl">
               <Card
                 p="lg"
                 radius="md"
                 style={{
-                  background:
-                    "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
+                  background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
                   border: "none",
                   transition: "transform 0.2s ease",
                   cursor: "default",
                 }}
                 className="total-section"
               >
-                <Group justify="space-between" py="md">
+                <Group position="apart" py="md">
                   <Stack spacing={2}>
                     <Text
                       size="xl"
@@ -588,7 +725,9 @@ const InvoiceSummaryDashboard = () => {
                     </Text>
                     <Text
                       size="sm"
-                      style={{ color: "rgba(255, 255, 255, 0.7)" }}
+                      style={{
+                        color: "rgba(255, 255, 255, 0.7)",
+                      }}
                     >
                       {selectedMonths.length > 0
                         ? `Months: ${selectedMonths.join(", ")} `
@@ -624,6 +763,8 @@ const InvoiceSummaryDashboard = () => {
                 </Group>
               </Card>
             </Box>
+    
+            {/* PAGINATION */}
             {totalPages > 1 && (
               <Pagination
                 total={totalPages}
@@ -632,6 +773,7 @@ const InvoiceSummaryDashboard = () => {
                 color="blue"
                 size="lg"
                 mt="xl"
+                aria-label="Invoice pagination"
               />
             )}
           </>
@@ -641,7 +783,11 @@ const InvoiceSummaryDashboard = () => {
   }
 
   return (
-    <MantineProvider>
+    <MantineProvider
+      theme={{ colorScheme: "dark" }}
+      withGlobalStyles
+      withNormalizeCSS
+    >
       <Container fluid>
         <Box mb="lg">
           <Text
