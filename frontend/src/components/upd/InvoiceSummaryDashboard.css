@@ -109,44 +109,25 @@
 }
 
 /* Accordion Styling */
-
-/* 
-  Give each Accordion item a card-like appearance with a border, 
-  margin for spacing, and a light background. 
-*/
 .mantine-Accordion-item {
-  margin-bottom: 0.75rem !important;
   border: 1px solid #e9ecef !important;
+  margin-bottom: 0.5rem;
   border-radius: 0.5rem !important;
-  overflow: hidden !important;
-  background-color: #f8f9fa !important; /* card background */
-}
 
-/* Control (the clickable header) inherits the parent background. */
-.mantine-Accordion-control {
-  background-color: transparent !important;
-  border: none !important;
-  padding: 1rem !important;
-  transition: background-color 0.2s ease, padding-left 0.2s ease;
-}
+  .mantine-Accordion-control {
+    padding: 1rem 1.5rem !important;
+    background-color: #f8f9fa !important;
+    border-radius: 0.5rem 0.5rem 0 0 !important;
 
-/* Hover highlight for the header. */
-.mantine-Accordion-item .mantine-Accordion-control:hover {
-  background-color: #f1f3f5 !important;
-  cursor: pointer;
-}
+    &:hover {
+      background-color: #f1f3f5 !important;
+    }
+  }
 
-/* Expanded state highlight: left border accent + slightly darker background. */
-.mantine-Accordion-item[data-state="opened"] .mantine-Accordion-control {
-  background-color: #e9ecef !important;
-  border-left: 4px solid #228be6;
-  padding-left: calc(1rem - 4px) !important;
-}
-
-/* Keep Accordion content flush. */
-.mantine-Accordion-content {
-  padding: 0 !important;
-  border-radius: 0 !important;
+  .mantine-Accordion-content {
+    padding: 0 !important;
+    border-radius: 0 0 0.5rem 0.5rem !important;
+  }
 }
 
 /* Responsive Design */
