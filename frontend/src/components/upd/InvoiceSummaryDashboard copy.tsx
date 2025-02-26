@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@apollo/client";
 import {
   Container,
@@ -71,14 +71,12 @@ const InvoiceSummaryDashboard = () => {
   const [planFilter, setPlanFilter] = useState<"ALL" | "UHC" | "UHG">("ALL");
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<string>("ALL");
-  // State for controlling the outer accordion (single expansion)
-  const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
 
   const itemsPerPage = 10;
 
   const { data, loading, error } = useQuery<{ getInvoiceData: InvoiceData[] }>(
     GET_INVOICE_DATA,
-    { fetchPolicy: "cache-and-network" }
+    { fetchPolicy: "cache-first" }
   );
 
   const allFiscalYears = useMemo(() => {
@@ -87,6 +85,7 @@ const InvoiceSummaryDashboard = () => {
     for (const item of data.getInvoiceData) {
       const idx = monthOrder.indexOf(item.month);
       if (idx >= 9) {
+        // OCT(9) - DEC(11) belongs to the next fiscal year
         yearsSet.add(item.year);
         yearsSet.add(item.year + 1);
       } else {
@@ -108,6 +107,7 @@ const InvoiceSummaryDashboard = () => {
       if (selectedFiscalYear !== "ALL") {
         const fy = parseInt(selectedFiscalYear, 10);
         const idx = monthOrder.indexOf(item.month);
+        // If month is OCT - DEC, it's the next fiscal year
         if (idx >= 9) {
           return item.year === fy - 1;
         } else {
@@ -179,6 +179,7 @@ const InvoiceSummaryDashboard = () => {
 
   const overallTotal = total2024 + total2025;
 
+  /** Utility: calculate totals for a group of plans. */
   const calculateGroupTotals = (plans: InvoiceData[]) => {
     return plans.reduce(
       (acc, curr) => ({
@@ -197,6 +198,7 @@ const InvoiceSummaryDashboard = () => {
     );
   };
 
+  /** Format currency with optional red color for negative values. */
   const formatAmount = (amount: number) => {
     const val = Math.abs(amount);
     const formatted = new Intl.NumberFormat("en-US", {
@@ -210,6 +212,7 @@ const InvoiceSummaryDashboard = () => {
     );
   };
 
+  /** Badge color based on plan type. */
   const getPlanBadgeColor = (planType: string) => {
     if (planType === "UHC-2000") return "blue";
     if (planType === "UHC-3000") return "green";
@@ -219,6 +222,7 @@ const InvoiceSummaryDashboard = () => {
     return "gray";
   };
 
+  /** Clean up plan type text, e.g. "UHC-3000" => "UHC 3000", "UHG-LIFE" => "LIFE". */
   const formatPlanType = (planType: string) => {
     if (planType.startsWith("UHG-")) {
       return planType.split("-")[1];
@@ -226,41 +230,87 @@ const InvoiceSummaryDashboard = () => {
     return planType.replace(/([A-Z])(\d)/g, "$1 $2");
   };
 
-  // Updated nested accordion – removed "multiple" so only one nested panel is open at a time.
+  /**
+   * Renders a table for each month/year group:
+   *   - One <thead> row (4 columns)
+   *   - One <tbody> row that spans all columns & holds the <Accordion>.
+   */
   const renderMonthData = (monthKey: string, group: any) => {
     const uhcTotals = calculateGroupTotals(group.uhcPlans);
     const uhgTotals = calculateGroupTotals(group.uhgPlans);
 
     return (
-      <Table className="fixed-table">
+      <Table style={{ tableLayout: "fixed", width: "100%" }}>
         <thead>
           <tr>
-            <th className="col-plan-type">Plan Type</th>
-            <th className="col-adjustments">Previous Months Adjustments</th>
-            <th className="col-current-month">Current Month Amount</th>
-            <th className="col-total">Total</th>
+            <th style={{ width: "30%", textAlign: "center" }}>Plan Type</th>
+            <th style={{ width: "23.33%", textAlign: "center" }}>
+              Previous Months Adjustments
+            </th>
+            <th style={{ width: "23.33%", textAlign: "center" }}>
+              Current Month Amount
+            </th>
+            <th style={{ width: "23.33%", textAlign: "center" }}>Total</th>
           </tr>
         </thead>
         <tbody>
-          <tr className="no-border">
-            <td colSpan={4} className="no-border">
-              <Accordion variant="contained">
+          <tr style={{ border: "none" }}>
+            {/* Make sure to remove default padding on the <td> as well */}
+            <td colSpan={4} style={{ padding: 0, margin: 0, border: "none" }}>
+              <Accordion variant="contained" multiple>
+                {/* UHC Item */}
                 {group.uhcPlans.length > 0 && (
                   <Accordion.Item value={`${monthKey}-uhc`}>
-                    <Accordion.Control className="no-padding">
-                      <Table className="summary-table">
+                    <Accordion.Control style={{ padding: 0 }}>
+                      {/* UHC summary row */}
+                      <Table
+                        style={{
+                          tableLayout: "fixed",
+                          width: "100%",
+                          border: "none",
+                          margin: 0,
+                        }}
+                      >
                         <tbody>
-                          <tr className="no-border">
-                            <td className="col-plan-type">
+                          <tr style={{ border: "none" }}>
+                            <td
+                              style={{
+                                width: "30%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               <Text fw={700}>UHC</Text>
                             </td>
-                            <td className="col-adjustments">
+                            <td
+                              style={{
+                                width: "23.33%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               {formatAmount(uhcTotals.allPreviousAdjustments)}
                             </td>
-                            <td className="col-current-month">
+                            <td
+                              style={{
+                                width: "23.33%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               {formatAmount(uhcTotals.currentMonthTotal)}
                             </td>
-                            <td className="col-total">
+                            <td
+                              style={{
+                                width: "23.33%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               {formatAmount(
                                 uhcTotals.currentMonthTotal +
                                   uhcTotals.allPreviousAdjustments
@@ -271,14 +321,27 @@ const InvoiceSummaryDashboard = () => {
                       </Table>
                     </Accordion.Control>
                     <Accordion.Panel>
-                      <Table className="details-table">
+                      {/* UHC detailed plan rows */}
+                      <Table
+                        style={{
+                          tableLayout: "fixed",
+                          width: "100%",
+                          margin: 0,
+                        }}
+                      >
                         <tbody>
                           {group.uhcPlans.map(
                             (plan: InvoiceData, idx: number) => (
                               <tr
                                 key={`${monthKey}-uhc-${plan.planType}-${idx}`}
                               >
-                                <td className="col-plan-type">
+                                <td
+                                  style={{
+                                    width: "30%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   <Badge
                                     color={getPlanBadgeColor(plan.planType)}
                                     variant="light"
@@ -287,13 +350,31 @@ const InvoiceSummaryDashboard = () => {
                                     {formatPlanType(plan.planType)}
                                   </Badge>
                                 </td>
-                                <td className="col-adjustments">
+                                <td
+                                  style={{
+                                    width: "23.33%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   {formatAmount(plan.allPreviousAdjustments)}
                                 </td>
-                                <td className="col-current-month">
+                                <td
+                                  style={{
+                                    width: "23.33%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   {formatAmount(plan.currentMonthTotal)}
                                 </td>
-                                <td className="col-total">
+                                <td
+                                  style={{
+                                    width: "23.33%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   {formatAmount(
                                     plan.currentMonthTotal +
                                       plan.allPreviousAdjustments
@@ -307,22 +388,60 @@ const InvoiceSummaryDashboard = () => {
                     </Accordion.Panel>
                   </Accordion.Item>
                 )}
+
+                {/* UHG Item */}
                 {group.uhgPlans.length > 0 && (
                   <Accordion.Item value={`${monthKey}-uhg`}>
-                    <Accordion.Control className="no-padding">
-                      <Table className="summary-table">
+                    <Accordion.Control style={{ padding: 0 }}>
+                      {/* UHG summary row */}
+                      <Table
+                        style={{
+                          tableLayout: "fixed",
+                          width: "100%",
+                          border: "none",
+                          margin: 0,
+                        }}
+                      >
                         <tbody>
-                          <tr className="no-border">
-                            <td className="col-plan-type">
+                          <tr style={{ border: "none" }}>
+                            <td
+                              style={{
+                                width: "30%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               <Text fw={700}>UHG</Text>
                             </td>
-                            <td className="col-adjustments">
+                            <td
+                              style={{
+                                width: "23.33%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               {formatAmount(uhgTotals.allPreviousAdjustments)}
                             </td>
-                            <td className="col-current-month">
+                            <td
+                              style={{
+                                width: "23.33%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               {formatAmount(uhgTotals.currentMonthTotal)}
                             </td>
-                            <td className="col-total">
+                            <td
+                              style={{
+                                width: "23.33%",
+                                textAlign: "center",
+                                padding: "0.5rem",
+                                border: "none",
+                              }}
+                            >
                               {formatAmount(
                                 uhgTotals.currentMonthTotal +
                                   uhgTotals.allPreviousAdjustments
@@ -333,14 +452,27 @@ const InvoiceSummaryDashboard = () => {
                       </Table>
                     </Accordion.Control>
                     <Accordion.Panel>
-                      <Table className="details-table">
+                      {/* UHG detailed plan rows */}
+                      <Table
+                        style={{
+                          tableLayout: "fixed",
+                          width: "100%",
+                          margin: 0,
+                        }}
+                      >
                         <tbody>
                           {group.uhgPlans.map(
                             (plan: InvoiceData, idx: number) => (
                               <tr
                                 key={`${monthKey}-uhg-${plan.planType}-${idx}`}
                               >
-                                <td className="col-plan-type">
+                                <td
+                                  style={{
+                                    width: "30%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   <Badge
                                     color={getPlanBadgeColor(plan.planType)}
                                     variant="light"
@@ -349,13 +481,31 @@ const InvoiceSummaryDashboard = () => {
                                     {formatPlanType(plan.planType)}
                                   </Badge>
                                 </td>
-                                <td className="col-adjustments">
+                                <td
+                                  style={{
+                                    width: "23.33%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   {formatAmount(plan.allPreviousAdjustments)}
                                 </td>
-                                <td className="col-current-month">
+                                <td
+                                  style={{
+                                    width: "23.33%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   {formatAmount(plan.currentMonthTotal)}
                                 </td>
-                                <td className="col-total">
+                                <td
+                                  style={{
+                                    width: "23.33%",
+                                    textAlign: "center",
+                                    padding: "0.5rem",
+                                  }}
+                                >
                                   {formatAmount(
                                     plan.currentMonthTotal +
                                       plan.allPreviousAdjustments
@@ -407,7 +557,10 @@ const InvoiceSummaryDashboard = () => {
             shadow="sm"
             p="xl"
             radius="md"
-            className="fiscal-year-card-blue"
+            style={{
+              background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
+              border: "none",
+            }}
           >
             <Stack gap="xs">
               <Group align="center" gap="xs">
@@ -424,7 +577,7 @@ const InvoiceSummaryDashboard = () => {
                 fw={700}
                 c="white"
                 mt="md"
-                className="fiscal-amount-text"
+                style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}
               >
                 {formatAmount(total2024)}
               </Text>
@@ -434,7 +587,10 @@ const InvoiceSummaryDashboard = () => {
             shadow="sm"
             p="xl"
             radius="md"
-            className="fiscal-year-card-blue"
+            style={{
+              background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
+              border: "none",
+            }}
           >
             <Stack gap="xs">
               <Group align="center" gap="xs">
@@ -451,7 +607,7 @@ const InvoiceSummaryDashboard = () => {
                 fw={700}
                 c="white"
                 mt="md"
-                className="fiscal-amount-text"
+                style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}
               >
                 {formatAmount(total2025)}
               </Text>
@@ -461,7 +617,10 @@ const InvoiceSummaryDashboard = () => {
             shadow="sm"
             p="xl"
             radius="md"
-            className="fiscal-year-card-green"
+            style={{
+              background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+              border: "none",
+            }}
           >
             <Stack gap="xs">
               <Group align="center" gap="xs">
@@ -478,14 +637,17 @@ const InvoiceSummaryDashboard = () => {
                 fw={700}
                 c="white"
                 mt="md"
-                className="fiscal-amount-text"
+                style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}
               >
                 {formatAmount(overallTotal)}
               </Text>
             </Stack>
           </Card>
         </SimpleGrid>
-        <div className="filter-container">
+        <div
+          className="filter-container"
+          style={{ display: "flex", justifyContent: "flex-start" }}
+        >
           <Group gap="md" align="flex-end">
             <SegmentedControl
               value={planFilter}
@@ -537,12 +699,8 @@ const InvoiceSummaryDashboard = () => {
           </Card>
         ) : (
           <>
-            {/* Outer accordion updated for single expansion */}
-            <Accordion
-              variant="contained"
-              value={activeAccordion}
-              onChange={setActiveAccordion}
-            >
+            {/* Top-level accordion for each month-year */}
+            <Accordion variant="contained" multiple>
               {currentItems.map(([key, group]) => (
                 <Accordion.Item key={key} value={key}>
                   <Accordion.Control>
@@ -567,7 +725,18 @@ const InvoiceSummaryDashboard = () => {
               ))}
             </Accordion>
             <Box mt="xl">
-              <Card p="lg" radius="md" className="total-section">
+              <Card
+                p="lg"
+                radius="md"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)",
+                  border: "none",
+                  transition: "transform 0.2s ease",
+                  cursor: "default",
+                }}
+                className="total-section"
+              >
                 <Group justify="space-between" py="md">
                   <Stack gap={2}>
                     <Text
@@ -577,17 +746,12 @@ const InvoiceSummaryDashboard = () => {
                         color: "rgba(255, 255, 255, 0.9)",
                         letterSpacing: "0.5px",
                       }}
-                      className="total-heading"
                     >
                       OVERALL INVOICE TOTAL
                     </Text>
                     <Text
                       size="sm"
-                      style={{
-                        color: "rgba(255, 255, 255, 0.9)",
-                        letterSpacing: "0.5px",
-                      }}
-                      className="total-subheading"
+                      style={{ color: "rgba(255, 255, 255, 0.7)" }}
                     >
                       {selectedMonths.length > 0
                         ? `Months: ${selectedMonths.join(", ")} `
@@ -597,11 +761,24 @@ const InvoiceSummaryDashboard = () => {
                         : ""}
                     </Text>
                   </Stack>
-                  <Box className="total-box">
+                  <Box
+                    style={{
+                      background: "rgba(255, 255, 255, 0.1)",
+                      padding: "1rem 1.5rem",
+                      borderRadius: "0.75rem",
+                      backdropFilter: "blur(8px)",
+                      boxShadow: "0 0.25rem 0.375rem rgba(0, 0, 0, 0.1)",
+                    }}
+                  >
                     <Text
                       size="28px"
                       fw={700}
-                      className="total-amount-text"
+                      style={{
+                        color: "white",
+                        fontFamily: "monospace",
+                        letterSpacing: "0.5px",
+                        textShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+                      }}
                       component="div"
                     >
                       {formatAmount(overallFilteredTotal)}
@@ -630,7 +807,15 @@ const InvoiceSummaryDashboard = () => {
     <MantineProvider>
       <Container fluid>
         <Box mb="lg">
-          <Text component="h1" className="dashboard-title">
+          <Text
+            component="h1"
+            style={{
+              fontSize: "1.8rem",
+              fontWeight: 700,
+              marginBottom: "0.5rem",
+              textAlign: "center",
+            }}
+          >
             MEDICAL INSURANCE INVOICE SUMMARY
           </Text>
         </Box>
