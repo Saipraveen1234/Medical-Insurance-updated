@@ -1,9 +1,16 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { AppShell, Box, Stack, Text, Container } from "@mantine/core";
 import { IconDashboard, IconDatabase } from "@tabler/icons-react";
-import InvoiceSummaryDashboard from "./components/InvoiceSummaryDashboard";
-import Datasets from "./components/Datasets";
 import NavButton from "./components/NavButton";
+import { LoadingSpinner } from "./components/shared/LoadingSpinner";
+
+// Lazy load components for better initial load time
+const InvoiceSummaryDashboard = lazy(() => 
+  import("./components/InvoiceSummaryDashboard")
+);
+const Datasets = lazy(() => 
+  import("./components/Datasets")
+);
 
 const VIEWS = {
   DASHBOARD: "dashboard",
@@ -16,14 +23,11 @@ const App = () => {
   const [activeView, setActiveView] = React.useState<ViewType>(VIEWS.DASHBOARD);
 
   const renderView = () => {
-    switch (activeView) {
-      case VIEWS.DASHBOARD:
-        return <InvoiceSummaryDashboard />;
-      case VIEWS.DATASETS:
-        return <Datasets />;
-      default:
-        return <InvoiceSummaryDashboard />;
-    }
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        {activeView === VIEWS.DASHBOARD ? <InvoiceSummaryDashboard /> : <Datasets />}
+      </Suspense>
+    );
   };
 
   return (

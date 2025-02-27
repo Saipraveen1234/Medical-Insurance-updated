@@ -10,6 +10,8 @@ from app.models import Employee, InsuranceFile
 class InsuranceService:
     def __init__(self, db: Session):
         self.db = db
+        # Simple cache for expensive operations
+        self._cache = {}
 
     def get_uhg_plan_type(self, row) -> str:
         """Determine UHG plan type based on row data"""
@@ -74,6 +76,9 @@ class InsuranceService:
 
     def process_file(self, file_content: str, plan_name: str) -> Dict[str, Any]:
         try:
+            # Clear cache when uploading a new file
+            self._cache = {}
+            
             # Check if file already exists
             existing_file = self.db.query(InsuranceFile).filter_by(plan_name=plan_name).first()
             if existing_file:
@@ -112,8 +117,10 @@ class InsuranceService:
             file_buffer = io.BytesIO(decoded)
 
             try:
-                df = pd.read_excel(file_buffer, skiprows=1)
-            except:
+                # Add engine='openpyxl' for better Excel file handling
+                df = pd.read_excel(file_buffer, skiprows=1, engine='openpyxl')
+            except Exception as excel_error:
+                # Fallback to CSV
                 file_buffer.seek(0)
                 df = pd.read_csv(file_buffer, skiprows=1)
 
@@ -137,52 +144,67 @@ class InsuranceService:
                     "error": f"No amount column found. Available columns: {df.columns.tolist()}"
                 }
 
-            for _, row in df.iterrows():
-                try:
-                    # Parse amount
-                    amount = row[amount_col]
-                    if isinstance(amount, str):
-                        amount = amount.replace('$', '').replace(',', '')
-                    amount = float(amount)
+            # Prepare employees for bulk insertion
+            employee_records = []
+            
+            # Process in chunks to avoid memory issues with large files
+            chunk_size = 1000
+            for i in range(0, len(df), chunk_size):
+                chunk = df.iloc[i:i+chunk_size]
+                chunk_employees = []
+                
+                for _, row in chunk.iterrows():
+                    try:
+                        # Parse amount
+                        amount = row[amount_col]
+                        if isinstance(amount, str):
+                            amount = amount.replace('$', '').replace(',', '')
+                        amount = float(amount)
 
-                    # Get plan type
-                    if base_plan == 'UHG':
-                        plan_type = self.get_uhg_plan_type(row)
-                    else:
-                        plan_type = base_plan
+                        # Get plan type
+                        if base_plan == 'UHG':
+                            plan_type = self.get_uhg_plan_type(row)
+                        else:
+                            plan_type = base_plan
 
-                    # Parse coverage dates and determine fiscal allocation
-                    coverage_dates = str(row.get('coverage dates', ''))
-                    parsed_date = self.parse_coverage_date(coverage_dates)
-                    
-                    # Default fiscal allocation
-                    allocation = {'current_month': True, 'previous_month': False}
-                    
-                    if parsed_date:
-                        # Use month number for fiscal allocation determination
-                        allocation = self.determine_fiscal_allocation(
-                            {'month': parsed_date['month'], 'year': parsed_date['year']}, 
-                            year
+                        # Parse coverage dates and determine fiscal allocation
+                        coverage_dates = str(row.get('coverage dates', ''))
+                        parsed_date = self.parse_coverage_date(coverage_dates)
+                        
+                        # Default fiscal allocation
+                        allocation = {'current_month': True, 'previous_month': False}
+                        
+                        if parsed_date:
+                            # Use month number for fiscal allocation determination
+                            allocation = self.determine_fiscal_allocation(
+                                {'month': parsed_date['month'], 'year': parsed_date['year']}, 
+                                year
+                            )
+
+                        # Create employee record
+                        employee = Employee(
+                            subscriber_name=str(row.get('id', row.get('subscriber id', ''))),
+                            plan=plan_type,
+                            coverage_type=str(row.get('coverage type', 'Standard')),
+                            status=str(row.get('adj code', row.get('status', 'No Adjustments'))).upper().strip(),
+                            coverage_dates=coverage_dates,
+                            charge_amount=amount,
+                            month=month,  # Store the month name
+                            year=year if not allocation['previous_month'] else year - 1,
+                            insurance_file_id=insurance_file.id
                         )
+                        chunk_employees.append(employee)
 
-                    # Create employee record
-                    employee = Employee(
-                        subscriber_name=str(row.get('id', row.get('subscriber id', ''))),
-                        plan=plan_type,
-                        coverage_type=str(row.get('coverage type', 'Standard')),
-                        status=str(row.get('adj code', row.get('status', 'No Adjustments'))).upper().strip(),
-                        coverage_dates=coverage_dates,
-                        charge_amount=amount,
-                        month=month,  # Store the month name
-                        year=year if not allocation['previous_month'] else year - 1,
-                        insurance_file_id=insurance_file.id
-                    )
-                    self.db.add(employee)
-
-                except Exception as row_error:
-                    print(f"Error processing row: {row_error}")
-                    continue
-
+                    except Exception as row_error:
+                        print(f"Error processing row: {row_error}")
+                        continue
+                
+                # Add all employees at once for this chunk
+                if chunk_employees:
+                    self.db.add_all(chunk_employees)
+                    self.db.flush()
+            
+            # Final commit after all chunks are processed        
             self.db.commit()
             return {
                 "success": True,
@@ -195,6 +217,7 @@ class InsuranceService:
                 "success": False,
                 "error": str(e)
             }
+            
     def determine_fiscal_year(self, date_dict: Dict[str, int]) -> int:
         """
         Determine fiscal year based on the coverage date.
@@ -209,7 +232,12 @@ class InsuranceService:
             return calendar_year + 1  # These belong to next fiscal year
         else:  # Jan-Sep
             return calendar_year  # These belong to the calendar year they're in
+            
     def get_invoice_data(self) -> List[Dict[str, Any]]:
+        # Check if we have cached results
+        if 'invoice_data' in self._cache:
+            return self._cache['invoice_data']
+            
         try:
             results = []
             files = self.db.query(InsuranceFile).all()
@@ -219,16 +247,27 @@ class InsuranceService:
                 'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
             }
             
-            for file in files:
-                employees = (
-                    self.db.query(Employee)
-                    .filter(Employee.insurance_file_id == file.id)
-                    .all()
-                )
-
+            # Use a dictionary for faster file lookup
+            file_map = {file.id: file for file in files}
+            
+            # Fetch all employees at once and process in memory
+            all_employees = self.db.query(Employee).all()
+            
+            # Group employees by file_id
+            employees_by_file = {}
+            for emp in all_employees:
+                if emp.insurance_file_id not in employees_by_file:
+                    employees_by_file[emp.insurance_file_id] = []
+                employees_by_file[emp.insurance_file_id].append(emp)
+            
+            for file_id, file_employees in employees_by_file.items():
+                if file_id not in file_map:
+                    continue
+                    
+                file = file_map[file_id]
                 plan_groups = {}
                 
-                for emp in employees:
+                for emp in file_employees:
                     if emp.plan not in plan_groups:
                         plan_groups[emp.plan] = {
                             'current_month': 0,
@@ -284,6 +323,8 @@ class InsuranceService:
                         'grandTotal': amounts['current_month'] + amounts['previous_month']
                     })
 
+            # Cache the results
+            self._cache['invoice_data'] = results
             return results
 
         except Exception as e:
@@ -291,19 +332,36 @@ class InsuranceService:
             return []
 
     def get_uploaded_files(self) -> List[Dict[str, str]]:
+        # Check cache first
+        if 'uploaded_files' in self._cache:
+            return self._cache['uploaded_files']
+            
         try:
-            files = self.db.query(InsuranceFile).order_by(InsuranceFile.upload_date.desc()).all()
-            return [{
+            # Optimize query to select only needed columns
+            files = self.db.query(
+                InsuranceFile.plan_name,
+                InsuranceFile.file_name,
+                InsuranceFile.upload_date
+            ).order_by(InsuranceFile.upload_date.desc()).all()
+            
+            results = [{
                 'planName': file.plan_name,
                 'fileName': file.file_name,
                 'uploadDate': file.upload_date.strftime('%Y-%m-%d %H:%M:%S')
             } for file in files]
+            
+            # Cache the result
+            self._cache['uploaded_files'] = results
+            return results
         except Exception as e:
             print(f"Error getting uploaded files: {str(e)}")
             return []
 
     def delete_file(self, plan_name: str) -> None:
         try:
+            # Clear cache when deleting a file
+            self._cache = {}
+            
             file = self.db.query(InsuranceFile).filter_by(plan_name=plan_name).first()
             if not file:
                 raise ValueError(f"File not found: {plan_name}")
