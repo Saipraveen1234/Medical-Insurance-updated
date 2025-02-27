@@ -1,17 +1,20 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from datetime import datetime
 import pandas as pd
 import base64
 import io
 from app.models import Employee, InsuranceFile
+import time
 
 class InsuranceService:
     def __init__(self, db: Session):
         self.db = db
         # Simple cache for expensive operations
         self._cache = {}
+        self._cache_time = {}
+        self._cache_ttl = 300  # 5 minutes
 
     def get_uhg_plan_type(self, row) -> str:
         """Determine UHG plan type based on row data"""
@@ -78,6 +81,7 @@ class InsuranceService:
         try:
             # Clear cache when uploading a new file
             self._cache = {}
+            self._cache_time = {}
             
             # Check if file already exists
             existing_file = self.db.query(InsuranceFile).filter_by(plan_name=plan_name).first()
@@ -234,9 +238,13 @@ class InsuranceService:
             return calendar_year  # These belong to the calendar year they're in
             
     def get_invoice_data(self) -> List[Dict[str, Any]]:
-        # Check if we have cached results
-        if 'invoice_data' in self._cache:
-            return self._cache['invoice_data']
+        # Check if we have cached results with TTL
+        cache_key = 'invoice_data'
+        current_time = time.time()
+        if (cache_key in self._cache and 
+            cache_key in self._cache_time and 
+            current_time - self._cache_time[cache_key] < self._cache_ttl):
+            return self._cache[cache_key]
             
         try:
             results = []
@@ -250,91 +258,180 @@ class InsuranceService:
             # Use a dictionary for faster file lookup
             file_map = {file.id: file for file in files}
             
-            # Fetch all employees at once and process in memory
-            all_employees = self.db.query(Employee).all()
+            # OPTIMIZATION: Fetch employees in batches to reduce memory pressure
+            batch_size = 10000
+            offset = 0
             
-            # Group employees by file_id
-            employees_by_file = {}
-            for emp in all_employees:
-                if emp.insurance_file_id not in employees_by_file:
-                    employees_by_file[emp.insurance_file_id] = []
-                employees_by_file[emp.insurance_file_id].append(emp)
-            
-            for file_id, file_employees in employees_by_file.items():
-                if file_id not in file_map:
-                    continue
-                    
-                file = file_map[file_id]
-                plan_groups = {}
+            while True:
+                # Get a batch of employees
+                employees_batch = (
+                    self.db.query(Employee)
+                    .limit(batch_size)
+                    .offset(offset)
+                    .all()
+                )
                 
-                for emp in file_employees:
-                    if emp.plan not in plan_groups:
-                        plan_groups[emp.plan] = {
-                            'current_month': 0,
-                            'previous_month': 0,
-                            'fiscal_by_year': {}
-                        }
-
-                    try:
-                        amount = float(emp.charge_amount)
-                        coverage_dates = emp.coverage_dates
-                        parsed_date = self.parse_coverage_date(coverage_dates)
-                        
-                        if parsed_date:
-                            # Determine fiscal year for the entry
-                            fiscal_year = self.determine_fiscal_year(parsed_date)
-                            
-                            # Initialize fiscal year tracking if not exists
-                            if fiscal_year not in plan_groups[emp.plan]['fiscal_by_year']:
-                                plan_groups[emp.plan]['fiscal_by_year'][fiscal_year] = 0
-                            
-                            # Add to fiscal year total
-                            plan_groups[emp.plan]['fiscal_by_year'][fiscal_year] += amount
-                            
-                            # Monthly display logic
-                            coverage_month = parsed_date['month']
-                            coverage_year = parsed_date['year']
-                            file_month = month_mapping[file.month]
-                            file_year = file.year
-                            
-                            # If the coverage date matches the file's month/year
-                            if coverage_month == file_month and coverage_year == file_year:
-                                plan_groups[emp.plan]['current_month'] += amount
-                            else:
-                                plan_groups[emp.plan]['previous_month'] += amount
-
-                    except Exception as e:
-                        print(f"Error processing amount for employee {emp.subscriber_name}: {str(e)}")
-                        continue
-
-                for plan_type, amounts in plan_groups.items():
-                    if amounts['current_month'] == 0 and amounts['previous_month'] == 0:
-                        continue
+                # Break if no more employees
+                if not employees_batch:
+                    break
                     
-                    results.append({
-                        'planType': plan_type,
-                        'month': file.month,
-                        'year': file.year,
-                        'currentMonthTotal': amounts['current_month'],
-                        'previousMonthsTotal': amounts['previous_month'],
-                        'allPreviousAdjustments': amounts['previous_month'],
-                        'fiscal2024Total': amounts['fiscal_by_year'].get(2024, 0),
-                        'fiscal2025Total': amounts['fiscal_by_year'].get(2025, 0),
-                        'grandTotal': amounts['current_month'] + amounts['previous_month']
-                    })
+                # Group employees by file
+                employees_by_file = {}
+                for emp in employees_batch:
+                    if emp.insurance_file_id not in employees_by_file:
+                        employees_by_file[emp.insurance_file_id] = []
+                    employees_by_file[emp.insurance_file_id].append(emp)
+                
+                # Process each file
+                for file_id, file_employees in employees_by_file.items():
+                    if file_id not in file_map:
+                        continue
+                        
+                    file = file_map[file_id]
+                    plan_groups = {}
+                    
+                    # Process employees
+                    for emp in file_employees:
+                        if emp.plan not in plan_groups:
+                            plan_groups[emp.plan] = {
+                                'current_month': 0,
+                                'previous_month': 0,
+                                'fiscal_by_year': {}
+                            }
 
-            # Cache the results
-            self._cache['invoice_data'] = results
+                        try:
+                            amount = float(emp.charge_amount)
+                            coverage_dates = emp.coverage_dates
+                            parsed_date = self.parse_coverage_date(coverage_dates)
+                            
+                            if parsed_date:
+                                # Determine fiscal year for the entry
+                                fiscal_year = self.determine_fiscal_year(parsed_date)
+                                
+                                # Initialize fiscal year tracking if not exists
+                                if fiscal_year not in plan_groups[emp.plan]['fiscal_by_year']:
+                                    plan_groups[emp.plan]['fiscal_by_year'][fiscal_year] = 0
+                                
+                                # Add to fiscal year total
+                                plan_groups[emp.plan]['fiscal_by_year'][fiscal_year] += amount
+                                
+                                # Monthly display logic
+                                coverage_month = parsed_date['month']
+                                coverage_year = parsed_date['year']
+                                file_month = month_mapping[file.month]
+                                file_year = file.year
+                                
+                                # If the coverage date matches the file's month/year
+                                if coverage_month == file_month and coverage_year == file_year:
+                                    plan_groups[emp.plan]['current_month'] += amount
+                                else:
+                                    plan_groups[emp.plan]['previous_month'] += amount
+
+                        except Exception as e:
+                            print(f"Error processing amount for employee {emp.subscriber_name}: {str(e)}")
+                            continue
+
+                    # Create result entries
+                    for plan_type, amounts in plan_groups.items():
+                        if amounts['current_month'] == 0 and amounts['previous_month'] == 0:
+                            continue
+                        
+                        results.append({
+                            'planType': plan_type,
+                            'month': file.month,
+                            'year': file.year,
+                            'currentMonthTotal': amounts['current_month'],
+                            'previousMonthsTotal': amounts['previous_month'],
+                            'allPreviousAdjustments': amounts['previous_month'],
+                            'fiscal2024Total': amounts['fiscal_by_year'].get(2024, 0),
+                            'fiscal2025Total': amounts['fiscal_by_year'].get(2025, 0),
+                            'grandTotal': amounts['current_month'] + amounts['previous_month']
+                        })
+
+                # Move to next batch
+                offset += batch_size
+            
+            # Cache the results with timestamp
+            self._cache[cache_key] = results
+            self._cache_time[cache_key] = current_time
+            
             return results
 
         except Exception as e:
             print(f"Error getting invoice data: {str(e)}")
             return []
 
+    def get_fiscal_year_totals(self) -> Dict[str, float]:
+        """Get just the fiscal year totals - much faster than full data"""
+        cache_key = 'fiscal_year_totals'
+        current_time = time.time()
+        
+        # Check cache
+        if (cache_key in self._cache and 
+            cache_key in self._cache_time and 
+            current_time - self._cache_time[cache_key] < self._cache_ttl):
+            return self._cache[cache_key]
+        
+        try:
+            # Use get_invoice_data results if available for consistency with original logic
+            if 'invoice_data' in self._cache:
+                invoice_data = self._cache['invoice_data']
+                total2024 = 0
+                total2025 = 0
+                
+                for item in invoice_data:
+                    total2024 += item['fiscal2024Total']
+                    total2025 += item['fiscal2025Total']
+                
+                totals = {
+                    'fiscal2024Total': total2024,
+                    'fiscal2025Total': total2025
+                }
+                
+                # Cache the result
+                self._cache[cache_key] = totals
+                self._cache_time[cache_key] = current_time
+                
+                return totals
+            
+            # Otherwise, execute a faster query just for totals
+            query = """
+            SELECT 
+                SUM(CASE 
+                    WHEN (e.month >= 'OCT' AND e.year = 2023) OR (e.month <= 'SEP' AND e.year = 2024) 
+                    THEN e.charge_amount ELSE 0 
+                END) as fiscal_2024_total,
+                SUM(CASE 
+                    WHEN (e.month >= 'OCT' AND e.year = 2024) OR (e.month <= 'SEP' AND e.year = 2025) 
+                    THEN e.charge_amount ELSE 0 
+                END) as fiscal_2025_total
+            FROM employees e
+            """
+            
+            result = self.db.execute(text(query)).fetchone()
+            
+            totals = {
+                'fiscal2024Total': float(result.fiscal_2024_total or 0),
+                'fiscal2025Total': float(result.fiscal_2025_total or 0)
+            }
+            
+            # Cache the result
+            self._cache[cache_key] = totals
+            self._cache_time[cache_key] = current_time
+            
+            return totals
+        except Exception as e:
+            print(f"Error getting fiscal year totals: {str(e)}")
+            return {'fiscal2024Total': 0, 'fiscal2025Total': 0}
+
     def get_uploaded_files(self) -> List[Dict[str, str]]:
-        # Check cache first
-        if 'uploaded_files' in self._cache:
-            return self._cache['uploaded_files']
+        # Check cache first with TTL
+        cache_key = 'uploaded_files'
+        current_time = time.time()
+        if (cache_key in self._cache and 
+            cache_key in self._cache_time and 
+            current_time - self._cache_time[cache_key] < self._cache_ttl):
+            return self._cache[cache_key]
             
         try:
             # Optimize query to select only needed columns
@@ -350,8 +447,10 @@ class InsuranceService:
                 'uploadDate': file.upload_date.strftime('%Y-%m-%d %H:%M:%S')
             } for file in files]
             
-            # Cache the result
-            self._cache['uploaded_files'] = results
+            # Cache the result with timestamp
+            self._cache[cache_key] = results
+            self._cache_time[cache_key] = current_time
+            
             return results
         except Exception as e:
             print(f"Error getting uploaded files: {str(e)}")
@@ -361,6 +460,7 @@ class InsuranceService:
         try:
             # Clear cache when deleting a file
             self._cache = {}
+            self._cache_time = {}
             
             file = self.db.query(InsuranceFile).filter_by(plan_name=plan_name).first()
             if not file:

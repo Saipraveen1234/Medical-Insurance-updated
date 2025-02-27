@@ -1,10 +1,10 @@
 import React, { lazy, Suspense } from "react";
-import { AppShell, Box, Stack, Text, Container } from "@mantine/core";
+import { AppShell, Box, Stack, Container } from "@mantine/core";
 import { IconDashboard, IconDatabase } from "@tabler/icons-react";
 import NavButton from "./components/NavButton";
 import { LoadingSpinner } from "./components/shared/LoadingSpinner";
 
-// Lazy load components for better initial load time
+// Lazy-load your main components
 const InvoiceSummaryDashboard = lazy(() => 
   import("./components/InvoiceSummaryDashboard")
 );
@@ -21,14 +21,6 @@ type ViewType = (typeof VIEWS)[keyof typeof VIEWS];
 
 const App = () => {
   const [activeView, setActiveView] = React.useState<ViewType>(VIEWS.DASHBOARD);
-
-  const renderView = () => {
-    return (
-      <Suspense fallback={<LoadingSpinner />}>
-        {activeView === VIEWS.DASHBOARD ? <InvoiceSummaryDashboard /> : <Datasets />}
-      </Suspense>
-    );
-  };
 
   return (
     <AppShell navbar={{ width: 250, breakpoint: "sm" }} padding={0}>
@@ -60,7 +52,12 @@ const App = () => {
 
       <AppShell.Main bg="gray.0">
         <Container fluid className="wrapper">
-          <Box p="md">{renderView()}</Box>
+          <Box p="md">
+            {/* Use Suspense to show a loading spinner while components load */}
+            <Suspense fallback={<LoadingSpinner />}>
+              {activeView === VIEWS.DASHBOARD ? <InvoiceSummaryDashboard /> : <Datasets />}
+            </Suspense>
+          </Box>
         </Container>
       </AppShell.Main>
     </AppShell>

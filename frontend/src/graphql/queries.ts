@@ -1,5 +1,45 @@
 import { gql } from '@apollo/client';
 
+// Ultra-fast totals-only query for initial dashboard loading
+export const GET_FISCAL_YEAR_TOTALS = gql`
+  query GetFiscalYearTotals {
+    getFiscalYearTotals {
+      fiscal2024Total
+      fiscal2025Total
+    }
+  }
+`;
+
+// Paginated invoice data for faster loading and filtering
+export const GET_INVOICE_DATA_PAGINATED = gql`
+  query GetInvoiceDataPaginated(
+    $page: Int = 1, 
+    $limit: Int = 100,
+    $filterPlan: String = null,
+    $filterMonth: String = null,
+    $filterYear: Int = null
+  ) {
+    getInvoiceDataPaginated(
+      page: $page, 
+      limit: $limit,
+      filterPlan: $filterPlan,
+      filterMonth: $filterMonth,
+      filterYear: $filterYear
+    ) {
+      planType
+      month
+      year
+      currentMonthTotal
+      previousMonthsTotal
+      fiscal2024Total
+      fiscal2025Total
+      allPreviousAdjustments
+      grandTotal
+    }
+  }
+`;
+
+// Legacy full query - kept for compatibility
 export const GET_INVOICE_DATA = gql`
   query GetInvoiceData {
     getInvoiceData {
@@ -8,6 +48,8 @@ export const GET_INVOICE_DATA = gql`
       year
       currentMonthTotal
       previousMonthsTotal
+      fiscal2024Total
+      fiscal2025Total
       allPreviousAdjustments
       grandTotal
     }
@@ -20,26 +62,6 @@ export const GET_UPLOADED_FILES = gql`
       planName
       fileName
       uploadDate
-    }
-  }
-`;
-
-export const UPLOAD_FILE = gql`
-  mutation UploadFile($fileInput: FileInput!) {
-    uploadFile(fileInput: $fileInput) {
-      success
-      message
-      error
-    }
-  }
-`;
-
-export const DELETE_FILE = gql`
-  mutation DeleteFile($planName: String!) {
-    deleteFile(planName: $planName) {
-      success
-      message
-      error
     }
   }
 `;

@@ -17,6 +17,11 @@ class InvoiceSummary:
     grandTotal: float
 
 @strawberry.type
+class FiscalYearTotals:
+    fiscal2024Total: float
+    fiscal2025Total: float
+
+@strawberry.type
 class UploadedFile:
     planName: str
     fileName: str
@@ -38,6 +43,7 @@ class OperationResult:
 class Query:
     @strawberry.field
     def get_invoice_data(self, info: Info) -> List[InvoiceSummary]:
+        """Legacy method - use get_invoice_data_paginated for better performance"""
         service = InsuranceService(info.context.db)
         data = service.get_invoice_data()
         return [
@@ -54,6 +60,50 @@ class Query:
             )
             for item in data
         ]
+        
+    @strawberry.field
+    def get_invoice_data_paginated(
+        self, 
+        info: Info, 
+        page: int = 1, 
+        limit: int = 100,
+        filterPlan: Optional[str] = None,
+        filterMonth: Optional[str] = None,
+        filterYear: Optional[int] = None
+    ) -> List[InvoiceSummary]:
+        """Optimized paginated invoice data query"""
+        service = InsuranceService(info.context.db)
+        data = service.get_invoice_data_paginated(
+            page=page, 
+            limit=limit,
+            filter_plan=filterPlan,
+            filter_month=filterMonth,
+            filter_year=filterYear
+        )
+        return [
+            InvoiceSummary(
+                planType=item['planType'],
+                month=item['month'],
+                year=item['year'],
+                currentMonthTotal=item['currentMonthTotal'],
+                previousMonthsTotal=item['previousMonthsTotal'],
+                fiscal2024Total=item['fiscal2024Total'],
+                fiscal2025Total=item['fiscal2025Total'],
+                allPreviousAdjustments=item['allPreviousAdjustments'],
+                grandTotal=item['grandTotal']
+            )
+            for item in data
+        ]
+    
+    @strawberry.field
+    def get_fiscal_year_totals(self, info: Info) -> FiscalYearTotals:
+        """Ultra-fast query to get only fiscal year totals without details"""
+        service = InsuranceService(info.context.db)
+        totals = service.get_fiscal_year_totals()
+        return FiscalYearTotals(
+            fiscal2024Total=totals['fiscal2024Total'],
+            fiscal2025Total=totals['fiscal2025Total']
+        )
 
     @strawberry.field
     def get_uploaded_files(self, info: Info) -> List[UploadedFile]:
