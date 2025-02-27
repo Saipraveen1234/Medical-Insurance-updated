@@ -1,73 +1,77 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ApolloClient, InMemoryCache, ApolloProvider, defaultDataIdFromObject } from "@apollo/client";
-import { MantineProvider } from "@mantine/core";
-
-import "@mantine/core/styles.css";
 import App from "./App";
+import { ApolloClient, InMemoryCache, ApolloProvider, defaultDataIdFromObject } from "@apollo/client";
+import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 
-// Configure Apollo Client with optimized caching strategy
-const cache = new InMemoryCache({
-  typePolicies: {
-    Query: {
-      fields: {
-        getInvoiceData: {
-          // Merge function to ensure proper cache updates
-          merge(existing = [], incoming) {
-            return incoming;
-          }
-        },
-        getUploadedFiles: {
-          // Merge function to ensure proper cache updates
-          merge(existing = [], incoming) {
-            return incoming;
+// Optimize Apollo Client with better caching strategy
+const client = new ApolloClient({
+  uri: "http://localhost:8000/graphql",
+  cache: new InMemoryCache({
+    typePolicies: {
+      Query: {
+        fields: {
+          getInvoiceData: {
+            // Merge strategy to improve caching behavior
+            merge(existing = [], incoming) {
+              return incoming;
+            }
+          },
+          getUploadedFiles: {
+            // Merge strategy to improve caching behavior
+            merge(existing = [], incoming) {
+              return incoming;
+            }
           }
         }
+      },
+      InvoiceSummary: {
+        // Stable ID generation for cache items
+        keyFields: ["planType", "month", "year"]
       }
     }
+  }),
+  defaultOptions: {
+    watchQuery: {
+      // Use cache-and-network for initial query, then cache-first for subsequent
+      fetchPolicy: 'cache-and-network',
+      nextFetchPolicy: 'cache-first',
+    },
+    query: {
+      fetchPolicy: 'cache-first',
+    }
   },
-  // Custom dataIdFromObject to ensure proper caching
-  dataIdFromObject(object) {
-    switch (object.__typename) {
-      case 'InvoiceSummary':
-        // Create unique ID for invoice summary items
-        return `${object.__typename}:${object.planType}:${object.month}:${object.year}`;
-      case 'UploadedFile':
-        return `${object.__typename}:${object.planName}`;
-      default:
-        return defaultDataIdFromObject(object);
+});
+
+// Create theme once and reuse it
+const theme = createTheme({
+  palette: {
+    mode: "light",
+    // Customize theme colors as needed
+  },
+  // Improve performance by reducing render depth
+  components: {
+    MuiButtonBase: {
+      defaultProps: {
+        disableRipple: true
+      }
     }
   }
 });
 
-// Configure Apollo Client with optimized settings
-const client = new ApolloClient({
-  uri: "http://localhost:8000/graphql",
-  cache,
-  defaultOptions: {
-    watchQuery: {
-      fetchPolicy: 'cache-and-network',
-      nextFetchPolicy: 'cache-first',
-      // Reduce network usage by batching queries
-      notifyOnNetworkStatusChange: true,
-    },
-    query: {
-      fetchPolicy: 'cache-first',
-      errorPolicy: 'all',
-    },
-    mutate: {
-      errorPolicy: 'all',
-    },
-  },
-  connectToDevTools: process.env.NODE_ENV === 'development',
-});
+// Get the root element once
+const rootElement = document.getElementById("root");
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ApolloProvider client={client}>
-      <MantineProvider>
-        <App />
-      </MantineProvider>
-    </ApolloProvider>
-  </React.StrictMode>
-);
+// Render the app
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <ApolloProvider client={client}>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <App />
+        </ThemeProvider>
+      </ApolloProvider>
+    </React.StrictMode>
+  );
+}

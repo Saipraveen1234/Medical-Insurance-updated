@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text, Group } from "@mantine/core";
+import { ListItemButton, ListItemIcon, ListItemText } from "@mui/material";
 
 interface NavButtonProps {
   icon: React.ReactNode;
@@ -15,24 +15,21 @@ const NavButton: React.FC<NavButtonProps> = ({
   onClick,
 }) => {
   return (
-    <Box
+    <ListItemButton
       onClick={onClick}
-      style={{
-        width: "100%",
-        padding: "16px 24px",
-        backgroundColor: active ? "#1a1d20" : "#2A3036", // Change to match navbar background
-        cursor: "pointer",
-        transition: "all 0.2s ease",
-        marginBottom: "8px",
+      selected={active}
+      sx={{
+        mb: 1,
+        backgroundColor: active ? "#1a1d20" : "#2A3036",
+        color: "white",
+        "&:hover": {
+          backgroundColor: active ? "#1a1d20" : "#3a4248",
+        },
       }}
     >
-      <Group>
-        {icon}
-        <Text size="md" color="white" fw={500} style={{ lineHeight: "1.8" }}>
-          {label}
-        </Text>
-      </Group>
-    </Box>
+      <ListItemIcon sx={{ color: "inherit" }}>{icon}</ListItemIcon>
+      <ListItemText primary={label} />
+    </ListItemButton>
   );
 };
 

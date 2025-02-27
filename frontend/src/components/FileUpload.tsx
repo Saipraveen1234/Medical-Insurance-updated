@@ -1,20 +1,22 @@
 import React, { useState } from "react";
 import {
   Button,
-  Group,
   Tooltip,
   Box,
   Paper,
-  Stack,
-  Text,
-  CloseButton,
-  Transition,
-} from "@mantine/core";
+  Grid,
+  Typography,
+  IconButton,
+} from "@mui/material";
 import { useMutation } from "@apollo/client";
-import { notifications } from "@mantine/notifications";
-import { IconUpload, IconCheck, IconX } from "@tabler/icons-react";
 import { UPLOAD_FILE } from "../graphql/mutations";
 import { GET_INVOICE_DATA, GET_UPLOADED_FILES } from "../graphql/queries";
+import {
+  Upload as UploadIcon,
+  CheckCircle as CheckIcon,
+  Cancel as CancelIcon,
+  Close as CloseIcon,
+} from "@mui/icons-material";
 
 interface UploadStatus {
   fileName: string;
@@ -22,9 +24,12 @@ interface UploadStatus {
   message: string;
 }
 
-const FileUpload = () => {
-  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
+interface FileUploadProps {
+  onUploadSuccess: () => void;
+}
 
+const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [uploadFile] = useMutation(UPLOAD_FILE, {
     refetchQueries: [
       { query: GET_UPLOADED_FILES },
@@ -32,15 +37,12 @@ const FileUpload = () => {
     ],
   });
 
-  // Remove a status notification
   const removeStatus = (index: number) => {
     setUploadStatuses((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Add a new status notification
   const addStatus = (status: UploadStatus) => {
     setUploadStatuses((prev) => [...prev, status]);
-    // Auto-remove after 5 seconds
     setTimeout(() => {
       setUploadStatuses((prev) =>
         prev.filter((s) => s.fileName !== status.fileName)
@@ -53,10 +55,7 @@ const FileUpload = () => {
   ) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
-
-    // Reset file input
     event.target.value = "";
-
     for (const file of files) {
       try {
         const reader = new FileReader();
@@ -70,7 +69,6 @@ const FileUpload = () => {
             });
             return;
           }
-
           try {
             const planName = file.name.split(".")[0].trim();
             const response = await uploadFile({
@@ -82,7 +80,6 @@ const FileUpload = () => {
                 },
               },
             });
-
             if (response.data?.uploadFile?.success) {
               addStatus({
                 fileName: file.name,
@@ -96,6 +93,7 @@ const FileUpload = () => {
                 message: response.data?.uploadFile?.error || "Upload failed",
               });
             }
+            onUploadSuccess();
           } catch (error) {
             addStatus({
               fileName: file.name,
@@ -104,7 +102,6 @@ const FileUpload = () => {
             });
           }
         };
-
         reader.onerror = () => {
           addStatus({
             fileName: file.name,
@@ -112,7 +109,6 @@ const FileUpload = () => {
             message: "Failed to read file",
           });
         };
-
         reader.readAsDataURL(file);
       } catch (error) {
         addStatus({
@@ -126,84 +122,80 @@ const FileUpload = () => {
 
   return (
     <>
-      <Group gap="xs">
-        <Tooltip label="Upload Excel or CSV files">
-          <Button
-            component="label"
-            leftSection={<IconUpload size={16} />}
-            variant="light"
-          >
-            Upload Files
-            <input
-              type="file"
-              onChange={handleFileChange}
-              accept=".xlsx,.xls,.csv"
-              style={{ display: "none" }}
-              multiple
-            />
-          </Button>
-        </Tooltip>
-      </Group>
-
-      {/* Floating Notifications Container */}
+      <Tooltip title="Upload Excel or CSV files">
+        <Button
+          variant="contained"
+          component="label"
+          startIcon={<UploadIcon />}
+        >
+          Upload Files
+          <input
+            type="file"
+            hidden
+            onChange={handleFileChange}
+            accept=".xlsx,.xls,.csv"
+            multiple
+          />
+        </Button>
+      </Tooltip>
       <Box
-        style={{
+        sx={{
           position: "fixed",
-          top: "20px",
-          right: "20px",
-          width: "300px",
-          zIndex: 9999,
+          top: 20,
+          right: 20,
+          width: 300,
+          zIndex: 1300,
         }}
       >
-        <Stack>
+        <Grid container direction="column" spacing={1}>
           {uploadStatuses.map((status, index) => (
-            <Transition
+            <Paper
               key={`${status.fileName}-${index}`}
-              mounted={true}
-              transition="slide-left"
+              sx={{
+                p: 1,
+                backgroundColor:
+                  status.status === "success" ? "#f0fdf4" : "#fef2f2",
+                border: `1px solid ${
+                  status.status === "success" ? "#86efac" : "#fecaca"
+                }`,
+              }}
             >
-              {(styles) => (
-                <Paper
-                  shadow="sm"
-                  p="sm"
-                  style={{
-                    ...styles,
-                    backgroundColor:
-                      status.status === "success" ? "#f0fdf4" : "#fef2f2",
-                    border: `1px solid ${
-                      status.status === "success" ? "#86efac" : "#fecaca"
-                    }`,
-                  }}
-                >
-                  <Group justify="space-between" align="flex-start">
-                    <Group gap="xs">
+              <Grid
+                container
+                justifyContent="space-between"
+                alignItems="center"
+              >
+                <Grid item>
+                  <Grid container alignItems="center" spacing={1}>
+                    <Grid item>
                       {status.status === "success" ? (
-                        <IconCheck size={16} color="#22c55e" />
+                        <CheckIcon color="success" fontSize="small" />
                       ) : (
-                        <IconX size={16} color="#ef4444" />
+                        <CancelIcon color="error" fontSize="small" />
                       )}
-                      <Box>
-                        <Text size="sm" fw={500}>
-                          {status.fileName}
-                        </Text>
-                        <Text
-                          size="xs"
-                          color={status.status === "success" ? "green" : "red"}
-                        >
-                          {status.message}
-                        </Text>
-                      </Box>
-                    </Group>
-                    <CloseButton
-                      size="sm"
-                      onClick={() => removeStatus(index)}
-                    />
-                  </Group>
-                </Paper>
-              )}
-            </Transition>
+                    </Grid>
+                    <Grid item>
+                      <Typography variant="body2" fontWeight="bold">
+                        {status.fileName}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color={status.status === "success" ? "green" : "red"}
+                      >
+                        {status.message}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Grid>
+                <Grid item>
+                  <IconButton size="small" onClick={() => removeStatus(index)}>
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Grid>
+              </Grid>
+            </Paper>
           ))}
-        </Stack>
+        </Grid>
       </Box>
     </>
   );

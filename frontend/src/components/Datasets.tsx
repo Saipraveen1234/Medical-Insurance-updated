@@ -1,67 +1,67 @@
 import React, { useState } from "react";
 import {
   Container,
-  Title,
+  Box,
   Card,
-  Group,
-  Text,
+  Typography,
   Table,
-  Modal,
-  Stack,
-  Button,
-  ActionIcon,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
   Checkbox,
-  Transition,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Paper,
-} from "@mantine/core";
+  Grid,
+  Snackbar,
+  Alert,
+} from "@mui/material";
 import { useQuery, useMutation } from "@apollo/client";
-import { notifications } from "@mantine/notifications";
-import { IconTrash, IconAlertTriangle } from "@tabler/icons-react";
 import { GET_UPLOADED_FILES, GET_INVOICE_DATA } from "../graphql/queries";
 import { DELETE_FILE } from "../graphql/mutations";
 import FileUpload from "./FileUpload";
-import { LoadingSpinner } from "./shared/LoadingSpinner";
-import { ErrorMessage } from "./shared/ErrorMessage";
+import CircularProgress from "@mui/material/CircularProgress";
+import { Delete as DeleteIcon } from "@mui/icons-material";
 
 const Datasets = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
 
-  // Query for getting uploaded files
   const { data, loading, error, refetch } = useQuery(GET_UPLOADED_FILES, {
     fetchPolicy: "network-only",
   });
 
-  // Delete mutation
   const [deleteFile, { loading: deleteLoading }] = useMutation(DELETE_FILE, {
     onCompleted: (data) => {
       if (data.deleteFile.success) {
-        notifications.show({
-          title: "Success",
-          message:
-            selectedFiles.length > 1
-              ? "Files deleted successfully"
-              : "File deleted successfully",
-          color: "green",
-        });
+        setSnackbarMessage(
+          selectedFiles.length > 1
+            ? "Files deleted successfully"
+            : "File deleted successfully"
+        );
+        setSnackbarSeverity("success");
+        setSnackbarOpen(true);
         setSelectedFiles([]);
         setSelectAll(false);
         refetch();
       } else {
-        notifications.show({
-          title: "Error",
-          message: data.deleteFile.message || "Failed to delete files",
-          color: "red",
-        });
+        setSnackbarMessage(data.deleteFile.message || "Failed to delete files");
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
       }
     },
     onError: (error) => {
-      notifications.show({
-        title: "Error",
-        message: error.message || "Failed to delete files",
-        color: "red",
-      });
+      setSnackbarMessage(error.message || "Failed to delete files");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
     },
     refetchQueries: [
       { query: GET_UPLOADED_FILES },
@@ -70,8 +70,9 @@ const Datasets = () => {
   });
 
   const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSelectAll(event.currentTarget.checked);
-    if (event.currentTarget.checked) {
+    const checked = event.target.checked;
+    setSelectAll(checked);
+    if (checked && data?.getUploadedFiles) {
       setSelectedFiles(data.getUploadedFiles.map((file: any) => file.planName));
     } else {
       setSelectedFiles([]);
@@ -88,184 +89,179 @@ const Datasets = () => {
 
   const handleConfirmDelete = async () => {
     try {
-      // Delete files sequentially to avoid overwhelming the server
       for (const planName of selectedFiles) {
         await deleteFile({
           variables: { planName },
         });
       }
       setDeleteModalOpen(false);
-    } catch (error) {
-      console.error("Delete error:", error);
+    } catch (err) {
+      console.error("Delete error:", err);
+      setSnackbarMessage("Failed to delete files");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
     }
   };
 
-  if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error.message} />;
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
+  };
+
+  if (loading)
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  if (error) return <Alert severity="error">{error.message}</Alert>;
 
   const hasSelectedFiles = selectedFiles.length > 0;
 
   return (
-    <Container size="xl">
-      <Stack>
-        <Group justify="space-between" align="center">
-          <Title order={2}>Datasets</Title>
-          <FileUpload onUploadSuccess={() => refetch()} />
-        </Group>
-
-        <Card shadow="sm" p="lg" radius="md" withBorder>
-          <Stack>
-            <Group justify="space-between">
-              <Title order={3}>Uploaded Files</Title>
-              <Transition mounted={hasSelectedFiles} transition="slide-left">
-                {(styles) => (
-                  <Paper
-                    shadow="sm"
-                    p="xs"
-                    style={{ ...styles, backgroundColor: "#f8f9fa" }}
+    <Container>
+      <Box sx={{ mb: 2 }}>
+        <Grid container justifyContent="space-between" alignItems="center">
+          <Grid item>
+            <Typography variant="h4">Datasets</Typography>
+          </Grid>
+          <Grid item>
+            <FileUpload onUploadSuccess={() => refetch()} />
+          </Grid>
+        </Grid>
+      </Box>
+      <Card sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+          <Typography variant="h5">Uploaded Files</Typography>
+          {hasSelectedFiles && (
+            <Paper sx={{ p: 1, backgroundColor: "#f8f9fa" }}>
+              <Grid container alignItems="center" spacing={1}>
+                <Grid item>
+                  <Typography variant="body2">
+                    {selectedFiles.length} file
+                    {selectedFiles.length !== 1 ? "s" : ""} selected
+                  </Typography>
+                </Grid>
+                <Grid item>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => setDeleteModalOpen(true)}
+                    disabled={deleteLoading}
                   >
-                    <Group>
-                      <Text size="sm" fw={500}>
-                        {selectedFiles.length} file
-                        {selectedFiles.length !== 1 ? "s" : ""} selected
-                      </Text>
-                      <Button
-                        variant="light"
-                        color="red"
-                        size="xs"
-                        leftSection={<IconTrash size={14} />}
-                        onClick={() => setDeleteModalOpen(true)}
-                        loading={deleteLoading}
-                      >
-                        Delete Selected
-                      </Button>
-                    </Group>
-                  </Paper>
-                )}
-              </Transition>
-            </Group>
-
-            {data?.getUploadedFiles?.length > 0 ? (
-              <Table striped highlightOnHover withTableBorder>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th style={{ width: 40 }}>
-                      <Checkbox
-                        checked={selectAll}
-                        onChange={handleSelectAll}
-                        aria-label="Select all files"
-                      />
-                    </Table.Th>
-                    <Table.Th>File Name</Table.Th>
-                    <Table.Th>Plan Name</Table.Th>
-                    <Table.Th>Upload Date</Table.Th>
-                    <Table.Th style={{ width: 100 }}>Actions</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {data.getUploadedFiles.map((file: any) => (
-                    <Table.Tr key={file.planName}>
-                      <Table.Td>
-                        <Checkbox
-                          checked={selectedFiles.includes(file.planName)}
-                          onChange={(event) =>
-                            handleSelectFile(
-                              file.planName,
-                              event.currentTarget.checked
-                            )
-                          }
-                          aria-label={`Select ${file.fileName}`}
-                        />
-                      </Table.Td>
-                      <Table.Td>{file.fileName}</Table.Td>
-                      <Table.Td>{file.planName}</Table.Td>
-                      <Table.Td>
-                        {new Date(file.uploadDate).toLocaleString()}
-                      </Table.Td>
-                      <Table.Td>
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          onClick={() => {
-                            setSelectedFiles([file.planName]);
-                            setDeleteModalOpen(true);
-                          }}
-                          loading={
-                            deleteLoading &&
-                            selectedFiles.includes(file.planName)
-                          }
-                          disabled={deleteLoading}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            ) : (
-              <Text c="dimmed" ta="center" py="xl">
-                No files uploaded yet. Use the upload button to add files.
-              </Text>
-            )}
-          </Stack>
-        </Card>
-      </Stack>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        opened={deleteModalOpen}
-        onClose={() => {
-          setDeleteModalOpen(false);
-        }}
-        title={
-          <Group gap="xs">
-            <IconAlertTriangle size={20} color="red" />
-            <Text size="lg" fw={500}>
-              Confirm Delete
-            </Text>
-          </Group>
-        }
-      >
-        <Stack gap={16}>
-          <Text>
+                    Delete Selected
+                  </Button>
+                </Grid>
+              </Grid>
+            </Paper>
+          )}
+        </Box>
+        {data?.getUploadedFiles?.length > 0 ? (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: 40 }}>
+                  <Checkbox checked={selectAll} onChange={handleSelectAll} />
+                </TableCell>
+                <TableCell>File Name</TableCell>
+                <TableCell>Plan Name</TableCell>
+                <TableCell>Upload Date</TableCell>
+                <TableCell sx={{ width: 100 }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {data.getUploadedFiles.map((file: any) => (
+                <TableRow key={file.planName}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedFiles.includes(file.planName)}
+                      onChange={(e) =>
+                        handleSelectFile(file.planName, e.target.checked)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>{file.fileName}</TableCell>
+                  <TableCell>{file.planName}</TableCell>
+                  <TableCell>
+                    {new Date(file.uploadDate).toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="text"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => {
+                        setSelectedFiles([file.planName]);
+                        setDeleteModalOpen(true);
+                      }}
+                      disabled={deleteLoading}
+                    >
+                      Delete
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            align="center"
+            sx={{ py: 4 }}
+          >
+            No files uploaded yet. Use the upload button to add files.
+          </Typography>
+        )}
+      </Card>
+      <Dialog open={deleteModalOpen} onClose={() => setDeleteModalOpen(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
             {selectedFiles.length > 1
               ? `Are you sure you want to delete these ${selectedFiles.length} files? This action cannot be undone.`
               : "Are you sure you want to delete this file? This action cannot be undone."}
-          </Text>
+          </Typography>
           {selectedFiles.length > 1 && (
-            <Paper withBorder p="xs" bg="gray.0">
-              <Stack gap="xs">
-                <Text size="sm" fw={500}>
-                  Selected files:
-                </Text>
-                {selectedFiles.map((fileName) => (
-                  <Text size="sm" key={fileName}>
-                    • {fileName}
-                  </Text>
-                ))}
-              </Stack>
+            <Paper variant="outlined" sx={{ p: 1, mt: 2 }}>
+              <Typography variant="subtitle2">Selected files:</Typography>
+              {selectedFiles.map((fileName) => (
+                <Typography key={fileName} variant="body2">
+                  • {fileName}
+                </Typography>
+              ))}
             </Paper>
           )}
-          <Group justify="flex-end">
-            <Button
-              variant="subtle"
-              onClick={() => {
-                setDeleteModalOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              loading={deleteLoading}
-              onClick={handleConfirmDelete}
-            >
-              Delete
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteModalOpen(false)} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            disabled={deleteLoading}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbarSeverity} 
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

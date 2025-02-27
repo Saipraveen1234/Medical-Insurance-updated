@@ -5,170 +5,29 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insurance Dashboard</title>
+    <!-- Google Fonts - Montserrat -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Global styles -->
     <style>
-      #root-loading-spinner {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        background-color: #f0f4fa;
-        z-index: 9999;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      body {
+        font-family: 'Arial', sans-serif;
+        margin: 0;
+        padding: 0;
       }
       
-      .loader-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 35px;
-        border-radius: 12px;
-        background-color: white;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-      }
-      
-      .company-logo {
-        width: 120px;
-        height: auto;
-        margin-bottom: 30px;
-      }
-      
-      .loading-text {
-        color: #2c3e50;
-        font-size: 20px;
-        font-weight: 600;
-        margin-bottom: 10px;
-      }
-      
-      .loading-subtext {
-        color: #64748b;
-        font-size: 14px;
-        text-align: center;
-        margin-bottom: 30px;
-      }
-      
-      .progress-container {
-        width: 250px;
-        margin-bottom: 5px;
-      }
-      
-      .progress-bar {
-        width: 100%;
-        height: 8px;
-        background-color: #e2e8f0;
-        border-radius: 4px;
-        overflow: hidden;
-      }
-      
-      .progress-fill {
-        height: 100%;
-        width: 0%;
-        background-color: #3b82f6;
-        border-radius: 4px;
-        transition: width 0.1s ease;
-      }
-      
-      .progress-text {
-        color: #64748b;
-        font-size: 12px;
-        margin-top: 6px;
-        text-align: right;
+      /* For numeric values in tables and cards */
+      .numeric-value {
+        font-family: 'Arial', monospace !important;
+        letter-spacing: 0.5px;
+        font-feature-settings: "tnum";
+        font-variant-numeric: tabular-nums;
       }
     </style>
   </head>
   <body>
-    <div id="root">
-      <!-- Loading screen with company logo and progress bar -->
-      <div id="root-loading-spinner">
-        <div class="loader-container">
-          <!-- Replace the src with the path to your company logo -->
-          <img src="/Untitled-5.png" alt="Company Logo" class="company-logo">
-          
-          <div class="loading-text">Insurance Dashboard</div>
-          <div class="loading-subtext">Initializing application...</div>
-          
-          <div class="progress-container">
-            <div class="progress-bar">
-              <div id="progress-fill" class="progress-fill"></div>
-            </div>
-            <div id="progress-text" class="progress-text">0%</div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Progressive loading simulation
-      (function() {
-        const progressFill = document.getElementById('progress-fill');
-        const progressText = document.getElementById('progress-text');
-        const loadingSubtext = document.querySelector('.loading-subtext');
-        
-        let progress = 0;
-        let loadingTexts = [
-          "Initializing application...",
-          "Loading resources...",
-          "Preparing data...",
-          "Connecting to services...",
-          "Setting up dashboard...",
-          "Almost ready..."
-        ];
-        
-        // This function will simulate the progress
-        function simulateProgress() {
-          // Start with faster progress, then slow down
-          const increment = progress < 70 ? (Math.random() * 5 + 1) : (Math.random() * 0.5 + 0.2);
-          
-          // Update progress, but never reach 100% until fully loaded
-          progress = Math.min(progress + increment, 95);
-          
-          // Update progress bar
-          progressFill.style.width = progress + '%';
-          progressText.textContent = Math.round(progress) + '%';
-          
-          // Update loading text occasionally
-          if (progress > 20 && progress < 95) {
-            const textIndex = Math.floor(progress / 20);
-            if (textIndex < loadingTexts.length) {
-              loadingSubtext.textContent = loadingTexts[textIndex];
-            }
-          }
-          
-          // Continue updating until nearly complete
-          if (progress < 95) {
-            setTimeout(simulateProgress, 200 + Math.random() * 300);
-          }
-        }
-        
-        // Start the progress simulation
-        setTimeout(simulateProgress, 300);
-        
-        // When window is fully loaded, complete the progress bar and fade out
-        window.onload = function() {
-          // Set to 100% complete
-          progressFill.style.width = '100%';
-          progressText.textContent = '100%';
-          loadingSubtext.textContent = "Ready!";
-          
-          // Wait a moment for user to see 100%, then fade out
-          setTimeout(() => {
-            const spinner = document.getElementById('root-loading-spinner');
-            if (spinner) {
-              spinner.style.opacity = '0';
-              spinner.style.transition = 'opacity 0.5s ease';
-              setTimeout(() => {
-                if (spinner.parentNode) {
-                  spinner.parentNode.removeChild(spinner);
-                }
-              }, 500);
-            }
-          }, 500);
-        };
-      })();
-    </script>
   </body>
 </html>
