@@ -25,6 +25,7 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
+import "./InvoiceSummaryDashboard.css";
 
 // Custom theme to match the Mantine styling
 const theme = createTheme({
@@ -119,22 +120,12 @@ const monthOrder = [
 interface NumericCellProps {
   value: number;
   className?: string;
-  style?: React.CSSProperties;
 }
 
-const NumericCell = ({ value, className, style = {} }: NumericCellProps) => {
+const NumericCell = ({ value, className = "" }: NumericCellProps) => {
   const isNegative = value < 0;
   return (
-    <td
-      className={className || "numeric-value"}
-      style={{
-        textAlign: "center",
-        padding: "10px",
-        borderBottom: "1px solid #e5e7eb",
-        ...(isNegative ? { color: "#ef4444" } : {}),
-        ...style,
-      }}
-    >
+    <td className={`dashboard-td ${isNegative ? "negative" : ""} ${className}`}>
       $
       {typeof value === "number"
         ? new Intl.NumberFormat("en-US", {
@@ -266,20 +257,6 @@ const InvoiceSummaryDashboard = () => {
   }, [data]);
 
   const overallTotal = total2024 + total2025;
-
-  const overallFilteredTotal = useMemo(() => {
-    return currentItems.reduce((acc, [_, group]) => {
-      const sumUHC = group.uhc.reduce(
-        (s: number, p: any) => s + p.grandTotal,
-        0
-      );
-      const sumUHG = group.uhg.reduce(
-        (s: number, p: any) => s + p.grandTotal,
-        0
-      );
-      return acc + sumUHC + sumUHG;
-    }, 0);
-  }, [currentItems]);
 
   const calcTotals = (plans: any[]) =>
     plans.reduce(
@@ -590,63 +567,21 @@ const InvoiceSummaryDashboard = () => {
                   </Box>
                 </AccordionSummary>
 
-                <AccordionDetails sx={{ p: 0 }}>
+                <AccordionDetails className="dashboard-accordion-details">
                   <Box>
-                    <table
-                      style={{ width: "100%", borderCollapse: "collapse" }}
-                    >
+                    <table className="dashboard-table">
                       <thead>
                         <tr>
-                          <th
-                            style={{
-                              width: "30%",
-                              textAlign: "center",
-                              padding: "10px",
-                              borderBottom: "1px solid #e5e7eb",
-                              fontSize: "0.875rem",
-                              fontWeight: "bold",
-                              color: "#374151",
-                            }}
-                          >
+                          <th className="dashboard-th dashboard-th-plan">
                             Plan Type
                           </th>
-                          <th
-                            style={{
-                              width: "23.33%",
-                              textAlign: "center",
-                              padding: "10px",
-                              borderBottom: "1px solid #e5e7eb",
-                              fontSize: "0.875rem",
-                              fontWeight: "bold",
-                              color: "#374151",
-                            }}
-                          >
+                          <th className="dashboard-th dashboard-th-other">
                             Previous Adjustments
                           </th>
-                          <th
-                            style={{
-                              width: "23.33%",
-                              textAlign: "center",
-                              padding: "10px",
-                              borderBottom: "1px solid #e5e7eb",
-                              fontSize: "0.875rem",
-                              fontWeight: "bold",
-                              color: "#374151",
-                            }}
-                          >
+                          <th className="dashboard-th dashboard-th-other">
                             Current Month
                           </th>
-                          <th
-                            style={{
-                              width: "23.33%",
-                              textAlign: "center",
-                              padding: "10px",
-                              borderBottom: "1px solid #e5e7eb",
-                              fontSize: "0.875rem",
-                              fontWeight: "bold",
-                              color: "#374151",
-                            }}
-                          >
+                          <th className="dashboard-th dashboard-th-other">
                             Total
                           </th>
                         </tr>
@@ -654,35 +589,16 @@ const InvoiceSummaryDashboard = () => {
                       <tbody>
                         {uhc.length > 0 && (
                           <>
-                            {/* UHC summary row with blue background, white bold text */}
-                            <tr
-                              style={{
-                                backgroundColor: "#3b82f6",
-                                fontWeight: "bold",
-                                color: "white",
-                              }}
-                            >
-                              <td
-                                style={{
-                                  textAlign: "center",
-                                  padding: "10px",
-                                  borderBottom: "1px solid #e5e7eb",
-                                }}
-                              >
-                                UHC
-                              </td>
+                            {/* UHC summary row */}
+                            <tr className="dashboard-summary-row">
+                              <td className="dashboard-td">UHC</td>
                               <NumericCell
                                 value={calcTotals(uhc).allPreviousAdjustments}
-                                style={{ fontWeight: "bold", color: "white" }}
                               />
                               <NumericCell
                                 value={calcTotals(uhc).currentMonthTotal}
-                                style={{ fontWeight: "bold", color: "white" }}
                               />
-                              <NumericCell
-                                value={calcTotals(uhc).grandTotal}
-                                style={{ fontWeight: "bold", color: "white" }}
-                              />
+                              <NumericCell value={calcTotals(uhc).grandTotal} />
                             </tr>
                             {uhc.map((plan: any, idx: number) => {
                               const rowTotal =
@@ -690,13 +606,7 @@ const InvoiceSummaryDashboard = () => {
                                 plan.currentMonthTotal;
                               return (
                                 <tr key={`uhc-${key}-${idx}`}>
-                                  <td
-                                    style={{
-                                      textAlign: "center",
-                                      padding: "10px",
-                                      borderBottom: "1px solid #e5e7eb",
-                                    }}
-                                  >
+                                  <td className="dashboard-td">
                                     <Chip
                                       label={formatPlanType(plan.planType)}
                                       color={getPlanBadgeColor(plan.planType)}
@@ -706,16 +616,9 @@ const InvoiceSummaryDashboard = () => {
                                   </td>
                                   <NumericCell
                                     value={plan.allPreviousAdjustments}
-                                    style={{ fontWeight: "bold" }}
                                   />
-                                  <NumericCell
-                                    value={plan.currentMonthTotal}
-                                    style={{ fontWeight: "bold" }}
-                                  />
-                                  <NumericCell
-                                    value={rowTotal}
-                                    style={{ fontWeight: "bold" }}
-                                  />
+                                  <NumericCell value={plan.currentMonthTotal} />
+                                  <NumericCell value={rowTotal} />
                                 </tr>
                               );
                             })}
@@ -723,35 +626,16 @@ const InvoiceSummaryDashboard = () => {
                         )}
                         {uhg.length > 0 && (
                           <>
-                            {/* UHG summary row with blue background, white bold text */}
-                            <tr
-                              style={{
-                                backgroundColor: "#3b82f6",
-                                fontWeight: "bold",
-                                color: "white",
-                              }}
-                            >
-                              <td
-                                style={{
-                                  textAlign: "center",
-                                  padding: "10px",
-                                  borderBottom: "1px solid #e5e7eb",
-                                }}
-                              >
-                                UHG
-                              </td>
+                            {/* UHG summary row */}
+                            <tr className="dashboard-summary-row">
+                              <td className="dashboard-td">UHG</td>
                               <NumericCell
                                 value={calcTotals(uhg).allPreviousAdjustments}
-                                style={{ fontWeight: "bold", color: "white" }}
                               />
                               <NumericCell
                                 value={calcTotals(uhg).currentMonthTotal}
-                                style={{ fontWeight: "bold", color: "white" }}
                               />
-                              <NumericCell
-                                value={calcTotals(uhg).grandTotal}
-                                style={{ fontWeight: "bold", color: "white" }}
-                              />
+                              <NumericCell value={calcTotals(uhg).grandTotal} />
                             </tr>
                             {uhg.map((plan: any, idx: number) => {
                               const rowTotal =
@@ -759,13 +643,7 @@ const InvoiceSummaryDashboard = () => {
                                 plan.currentMonthTotal;
                               return (
                                 <tr key={`uhg-${key}-${idx}`}>
-                                  <td
-                                    style={{
-                                      textAlign: "center",
-                                      padding: "10px",
-                                      borderBottom: "1px solid #e5e7eb",
-                                    }}
-                                  >
+                                  <td className="dashboard-td">
                                     <Chip
                                       label={formatPlanType(plan.planType)}
                                       color={getPlanBadgeColor(plan.planType)}
@@ -775,16 +653,9 @@ const InvoiceSummaryDashboard = () => {
                                   </td>
                                   <NumericCell
                                     value={plan.allPreviousAdjustments}
-                                    style={{ fontWeight: "bold" }}
                                   />
-                                  <NumericCell
-                                    value={plan.currentMonthTotal}
-                                    style={{ fontWeight: "bold" }}
-                                  />
-                                  <NumericCell
-                                    value={rowTotal}
-                                    style={{ fontWeight: "bold" }}
-                                  />
+                                  <NumericCell value={plan.currentMonthTotal} />
+                                  <NumericCell value={rowTotal} />
                                 </tr>
                               );
                             })}

@@ -11,7 +11,6 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Remove centering so layouts flow naturally */
 body {
   margin: 0;
   min-width: 320px;

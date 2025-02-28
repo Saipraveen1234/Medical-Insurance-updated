@@ -20,10 +20,16 @@ const NavButton: React.FC<NavButtonProps> = ({
       selected={active}
       sx={{
         mb: 1,
-        backgroundColor: active ? "#1a1d20" : "#2A3036",
+        backgroundColor: active ? "#0395B7" : "#2A3036",
         color: "white",
         "&:hover": {
-          backgroundColor: active ? "#1a1d20" : "#3a4248",
+          backgroundColor: active ? "#0395B7" : "#3a4248",
+        },
+        "&.Mui-selected": {
+          backgroundColor: "#0395B7",
+          "&:hover": {
+            backgroundColor: "#0395B7",
+          },
         },
       }}
     >
