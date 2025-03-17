@@ -3,6 +3,7 @@ from typing import List, Optional
 from strawberry.types import Info
 from datetime import datetime
 from app.services.insurance_analytics import InsuranceService
+from sqlalchemy import or_, and_
 
 @strawberry.type
 class InvoiceSummary:
@@ -26,6 +27,27 @@ class UploadedFile:
     planName: str
     fileName: str
     uploadDate: str
+
+@strawberry.type
+class EmployeeDetail:
+    id: int
+    subscriberId: str  # This is the subscriber ID number (e.g., 8062743400)
+    subscriberName: str  # This is the actual name of the subscriber
+    plan: str
+    coverageType: str
+    status: str
+    coverageDates: str
+    chargeAmount: float
+    previousAdjustments: float  # Amount from previous adjustments
+    previousFiscalAmount: float  # Amount from previous fiscal year
+    month: str
+    year: int
+    insuranceFileId: int
+    
+@strawberry.type
+class EmployeeDetailResponse:
+    total: int
+    employees: List[EmployeeDetail]
 
 @strawberry.input
 class FileInput:
@@ -117,6 +139,101 @@ class Query:
             )
             for result in results
         ]
+        
+    @strawberry.field
+    def get_employee_details(
+        self, 
+        info: Info, 
+        page: int = 1, 
+        limit: int = 10,
+        searchText: Optional[str] = None
+    ) -> EmployeeDetailResponse:
+        """Get paginated employee details with optional search"""
+        service = InsuranceService(info.context.db)
+        results = service.get_employee_details(page, limit, searchText)
+        
+        return EmployeeDetailResponse(
+            total=results['total'],
+            employees=[
+                EmployeeDetail(
+                    id=emp['id'],
+                    subscriberId=emp.get('subscriberId', emp.get('subscriber_name', '')),
+                    subscriberName=emp.get('subscriberName', emp.get('Subscriber Name', '')),
+                    plan=emp['plan'],
+                    coverageType=emp['coverageType'],
+                    status=emp['status'],
+                    coverageDates=emp['coverageDates'],
+                    chargeAmount=emp['chargeAmount'],
+                    previousAdjustments=emp.get('previousAdjustments', 0.0),
+                    previousFiscalAmount=emp.get('previousFiscalAmount', 0.0),
+                    month=emp['month'],
+                    year=emp['year'],
+                    insuranceFileId=emp['insuranceFileId']
+                )
+                for emp in results['employees']
+            ]
+        )
+    
+    @strawberry.field
+    def get_all_employees(self, info: Info) -> List[EmployeeDetail]:
+        """Get all employee details (for smaller datasets or initial load)"""
+        service = InsuranceService(info.context.db)
+        employees = service.get_all_employees()
+        
+        return [
+            EmployeeDetail(
+                id=emp['id'],
+                # Split subscriber_name to get ID and name if possible
+                subscriberId=emp['subscriber_name'].split(' - ')[0] if ' - ' in emp['subscriber_name'] else emp['subscriber_name'],
+                subscriberName=emp['subscriber_name'].split(' - ')[1] if ' - ' in emp['subscriber_name'] else f"Employee {emp['id']}",
+                plan=emp['plan'],
+                coverageType=emp['coverage_type'],
+                status=emp['status'],
+                coverageDates=emp['coverage_dates'],
+                chargeAmount=emp['charge_amount'],
+                previousAdjustments=0.0,
+                previousFiscalAmount=0.0,
+                month=emp['month'],
+                year=emp['year'],
+                insuranceFileId=emp['insurance_file_id']
+            )
+            for emp in employees
+        ]
+        
+        
+    @strawberry.field
+    def get_unique_employees(
+        self, 
+        info: Info, 
+        page: int = 1, 
+        limit: int = 10,
+        searchText: Optional[str] = None
+    ) -> EmployeeDetailResponse:
+        """Get paginated unique employees with optional search (only latest record per subscriber)"""
+        service = InsuranceService(info.context.db)
+        results = service.get_unique_employees(page, limit, searchText)
+        
+        return EmployeeDetailResponse(
+            total=results['total'],
+            employees=[
+                EmployeeDetail(
+                    id=emp['id'],
+                    subscriberId=emp.get('subscriberId', emp.get('subscriber_id', '')),
+                    subscriberName=emp.get('subscriberName', emp.get('subscriber_name', '')),
+                    plan=emp['plan'],
+                    coverageType=emp['coverageType'],
+                    status=emp['status'],
+                    coverageDates=emp['coverageDates'],
+                    chargeAmount=emp['chargeAmount'],
+                    previousAdjustments=emp.get('previousAdjustments', 0.0),
+                    previousFiscalAmount=emp.get('previousFiscalAmount', 0.0),
+                    month=emp['month'],
+                    year=emp['year'],
+                    insuranceFileId=emp['insuranceFileId']
+                )
+                for emp in results['employees']
+            ]
+        )
 
 @strawberry.type
 class Mutation:

@@ -11,7 +11,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Your React app's address
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:5174", "https://runapp.dev.tabner.io"],  # Added more common local dev servers
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,3 +32,8 @@ graphql_app = GraphQLRouter(
 
 # Include GraphQL routes
 app.include_router(graphql_app, prefix="/graphql")
+
+# Add a health check endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}

@@ -65,3 +65,62 @@ export const GET_UPLOADED_FILES = gql`
     }
   }
 `;
+
+// Employee details queries
+export const GET_EMPLOYEE_DETAILS = gql`
+  query GetEmployeeDetails($page: Int!, $limit: Int!, $searchText: String) {
+    getEmployeeDetails(page: $page, limit: $limit, searchText: $searchText) {
+      total
+      employees {
+        id
+        subscriber_name
+        coverage_type
+        coverage_dates
+        charge_amount
+        plan
+        status
+        month
+        year
+        insurance_file_id
+      }
+    }
+  }
+`;
+
+export const GET_ALL_EMPLOYEES = gql`
+  query GetAllEmployees {
+    getAllEmployees {
+      id
+      subscriber_name
+      coverage_type
+      coverage_dates
+      charge_amount
+      plan
+      status
+      month
+      year
+      insurance_file_id
+    }
+  }
+`;
+
+export const GET_UNIQUE_EMPLOYEES = gql`
+  query GetUniqueEmployees($page: Int!, $limit: Int!, $searchText: String) {
+    getUniqueEmployees(page: $page, limit: $limit, searchText: $searchText) {
+      total
+      employees {
+        id
+        subscriberId
+        subscriberName
+        coverageType
+        coverageDates
+        chargeAmount
+        plan
+        status
+        month
+        year
+        insuranceFileId
+      }
+    }
+  }
+`;

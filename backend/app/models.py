@@ -24,7 +24,7 @@ class Employee(Base):
     __tablename__ = "employees"
 
     id = Column(Integer, primary_key=True, index=True)
-    subscriber_name = Column(String, index=True)
+    subscriber_name = Column(String, index=True)  # This is the field name in the database
     plan = Column(String, index=True)  # UHC-3000, UHC-2000, etc.
     coverage_type = Column(String)
     status = Column(String)
