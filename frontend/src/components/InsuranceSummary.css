@@ -1,0 +1,122 @@
+/* Insurance Summary Styles */
+
+.summary-title {
+  margin-bottom: 1.5rem;
+  font-family: "Bookman Old Style", serif;
+  font-weight: 700;
+}
+
+.summary-paper {
+  padding: 0;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.summary-header {
+  padding: 1rem;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.summary-header-title {
+  font-family: "Bookman Old Style", serif;
+  font-weight: 700;
+}
+
+.summary-content {
+  padding: 1.5rem;
+  background-color: #f8fafc;
+}
+
+.metric-label {
+  color: #64748b;
+  margin-bottom: 0.5rem;
+  font-family: "Bookman Old Style", serif;
+}
+
+.metric-value {
+  font-weight: bold;
+  font-family: "Bookman Old Style", serif;
+  color: #1e3a8a;
+}
+
+.total-box {
+  padding: 1rem;
+  background-color: #3b82f6;
+  border-radius: 6px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.total-label {
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 0.5rem;
+  font-family: "Bookman Old Style", serif;
+}
+
+.total-value {
+  font-weight: bold;
+  font-family: "Bookman Old Style", serif;
+  color: #ffffff;
+}
+
+.fiscal-summary {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 2.5rem;
+}
+
+.fiscal-box {
+  text-align: left;
+  padding: 0 1.5rem;
+}
+
+.table-container {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.current-month-row {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.current-month-row:hover {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+.current-month-cell {
+  font-weight: bold;
+  position: relative;
+}
+
+.current-month-cell::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #3b82f6;
+}
+
+.current-month-indicator {
+  color: #3b82f6;
+  font-size: 0.75rem;
+  margin-left: 4px;
+}
+
+.total-row {
+  background-color: #e5e7eb !important;
+}
+
+.total-cell {
+  font-weight: bold;
+}

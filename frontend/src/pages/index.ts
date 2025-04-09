@@ -1,5 +1,3 @@
-import EmployeeDetails from './EmployeeDetails';
+import EmployeeDetails from "./EmployeeDetails";
 
-export {
-  EmployeeDetails
-};
+export { EmployeeDetails };

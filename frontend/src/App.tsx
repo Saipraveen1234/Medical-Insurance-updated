@@ -11,22 +11,23 @@ import {
   Typography,
   ThemeProvider,
   createTheme,
-  Avatar,
 } from "@mui/material";
 import {
   Storage as StorageIcon,
   People as PeopleIcon,
   Home as HomeIcon,
-  Logout as LogoutIcon,
+  Summarize as SummarizeIcon,
 } from "@mui/icons-material";
 import InvoiceSummaryDashboard from "./components/Insurance";
 import Datasets from "./components/Datasets";
 import { EmployeeDetails } from "./pages";
+import InsuranceSummary from "./components/InsuranceSummary";
 
 const VIEWS = {
   DASHBOARD: "dashboard",
   DATASETS: "datasets",
   EMPLOYEE_DETAILS: "employee_details",
+  INSURANCE_SUMMARY: "insurance_summary",
 } as const;
 
 type ViewType = (typeof VIEWS)[keyof typeof VIEWS];
@@ -118,6 +119,8 @@ const App = () => {
         return <Datasets />;
       case VIEWS.EMPLOYEE_DETAILS:
         return <EmployeeDetails />;
+      case VIEWS.INSURANCE_SUMMARY:
+        return <InsuranceSummary />;
       default:
         return <InvoiceSummaryDashboard />;
     }
@@ -168,6 +171,28 @@ const App = () => {
           </ListItemIcon>
           <ListItemText
             primary="Dashboard"
+            primaryTypographyProps={{
+              fontSize: "0.95rem",
+              fontWeight: 500,
+              fontFamily: "'Bookman Old Style', serif",
+            }}
+          />
+        </ListItemButton>
+
+        <ListItemButton
+          selected={activeView === VIEWS.INSURANCE_SUMMARY}
+          onClick={() => setActiveView(VIEWS.INSURANCE_SUMMARY)}
+          sx={{
+            color:
+              activeView === VIEWS.INSURANCE_SUMMARY ? "#ffffff" : "#475569",
+            mb: 1,
+          }}
+        >
+          <ListItemIcon sx={{ color: "inherit" }}>
+            <SummarizeIcon />
+          </ListItemIcon>
+          <ListItemText
+            primary="Insurance Summary"
             primaryTypographyProps={{
               fontSize: "0.95rem",
               fontWeight: 500,
@@ -261,35 +286,7 @@ const App = () => {
             position: "relative",
           }}
         >
-          {/* Top header */}
-          <Box
-            sx={{
-              p: 2,
-              bgcolor: "#ffffff",
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              borderBottom: "1px solid #e2e8f0",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
-            }}
-          >
-            <Box
-              sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-            >
-              <Typography
-                sx={{
-                  mr: 1,
-                  color: "#475569",
-                  fontWeight: 500,
-                  fontFamily: "'Bookman Old Style', serif",
-                }}
-              >
-                Log Out
-              </Typography>
-              <LogoutIcon sx={{ color: "#475569", fontSize: "1.25rem" }} />
-            </Box>
-          </Box>
-
+          {/* Main content - Removed top header with logout button */}
           {renderView()}
         </Box>
       </Box>
