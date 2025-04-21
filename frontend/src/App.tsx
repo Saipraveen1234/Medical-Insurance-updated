@@ -1,3 +1,5 @@
+// App.tsx
+
 import React from "react";
 import {
   Box,
@@ -17,23 +19,27 @@ import {
   People as PeopleIcon,
   Home as HomeIcon,
   Summarize as SummarizeIcon,
+  Dashboard as DashboardIcon,
 } from "@mui/icons-material";
 import InvoiceSummaryDashboard from "./components/Insurance";
-import Datasets from "./components/Datasets";
-import { EmployeeDetails } from "./pages";
 import InsuranceSummary from "./components/InsuranceSummary";
+import { EmployeeDetails } from "./pages";
+import Datasets from "./components/Datasets";
+import Master from "./components/Master"; // New MASTER page
 
+// Extend your views object to include the new MASTER page.
 const VIEWS = {
   DASHBOARD: "dashboard",
-  DATASETS: "datasets",
-  EMPLOYEE_DETAILS: "employee_details",
   INSURANCE_SUMMARY: "insurance_summary",
+  EMPLOYEE_DETAILS: "employee_details",
+  MASTER: "master", // New MASTER view
+  DATASETS: "datasets",
 } as const;
 
 type ViewType = (typeof VIEWS)[keyof typeof VIEWS];
 const drawerWidth = 250;
 
-// Create a theme to match the provided screenshot
+// Create a theme that matches your design preferences
 const theme = createTheme({
   typography: {
     fontFamily: "'Bookman Old Style', 'Segoe UI', 'Arial', sans-serif",
@@ -115,12 +121,14 @@ const App = () => {
     switch (activeView) {
       case VIEWS.DASHBOARD:
         return <InvoiceSummaryDashboard />;
-      case VIEWS.DATASETS:
-        return <Datasets />;
-      case VIEWS.EMPLOYEE_DETAILS:
-        return <EmployeeDetails />;
       case VIEWS.INSURANCE_SUMMARY:
         return <InsuranceSummary />;
+      case VIEWS.EMPLOYEE_DETAILS:
+        return <EmployeeDetails />;
+      case VIEWS.MASTER:
+        return <Master />;
+      case VIEWS.DATASETS:
+        return <Datasets />;
       default:
         return <InvoiceSummaryDashboard />;
     }
@@ -223,6 +231,27 @@ const App = () => {
           />
         </ListItemButton>
 
+        <ListItemButton
+          selected={activeView === VIEWS.MASTER}
+          onClick={() => setActiveView(VIEWS.MASTER)}
+          sx={{
+            color: activeView === VIEWS.MASTER ? "#ffffff" : "#475569",
+            mb: 1,
+          }}
+        >
+          <ListItemIcon sx={{ color: "inherit" }}>
+            <DashboardIcon />
+          </ListItemIcon>
+          <ListItemText
+            primary="Master"
+            primaryTypographyProps={{
+              fontSize: "0.95rem",
+              fontWeight: 500,
+              fontFamily: "'Bookman Old Style', serif",
+            }}
+          />
+        </ListItemButton>
+
         <Divider sx={{ bgcolor: "#e2e8f0", my: 2 }} />
 
         <ListItemButton
@@ -286,7 +315,6 @@ const App = () => {
             position: "relative",
           }}
         >
-          {/* Main content - Removed top header with logout button */}
           {renderView()}
         </Box>
       </Box>
